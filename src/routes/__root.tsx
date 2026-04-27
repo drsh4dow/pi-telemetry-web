@@ -1,4 +1,7 @@
 /// <reference types="vite/client" />
+import "@fontsource-variable/geist/index.css";
+import "@fontsource-variable/geist-mono/index.css";
+
 import { createRootRoute, HeadContent, Scripts } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import appCss from "~/styles/app.css?url";
@@ -14,19 +17,7 @@ export const Route = createRootRoute({
 				content: "Self-hosted telemetry dashboard for pi-telemetry-minimal.",
 			},
 		],
-		links: [
-			{ rel: "preconnect", href: "https://fonts.googleapis.com" },
-			{
-				rel: "preconnect",
-				href: "https://fonts.gstatic.com",
-				crossOrigin: "anonymous",
-			},
-			{
-				rel: "stylesheet",
-				href: "https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Fraunces:opsz,wght@9..144,300..700&display=swap",
-			},
-			{ rel: "stylesheet", href: appCss },
-		],
+		links: [{ rel: "stylesheet", href: appCss }],
 	}),
 	shellComponent: RootDocument,
 });

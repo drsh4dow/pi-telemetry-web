@@ -1,66 +1,40 @@
 @import 'tailwindcss' source('../');
 
-/* Fonts are loaded via <link> in __root head for proper preconnect. */
-
 @theme {
-	--font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-	--font-mono: "Geist Mono", ui-monospace, "JetBrains Mono", "SF Mono", Consolas, monospace;
-	--font-display: "Fraunces", "Iowan Old Style", "Apple Garamond", Georgia, serif;
+	--font-sans: "Geist Variable", "Geist", ui-sans-serif, system-ui, -apple-system,
+		"Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+	--font-mono: "Geist Mono Variable", "Geist Mono", ui-monospace,
+		"JetBrains Mono", "SF Mono", Consolas, monospace;
 
-	/* Refined dark glass palette. Base is near-black with a faint cool cast. */
-	--color-bg: oklch(0.16 0.012 260);
-	--color-bg-elevated: oklch(0.205 0.014 260);
-	--color-bg-glass: oklch(0.22 0.015 260 / 0.55);
-	--color-bg-grid: oklch(0.27 0.015 260 / 0.45);
+	/* shadcn-style zinc dark theme. */
+	--color-background: oklch(0.145 0.005 264);   /* zinc-950 */
+	--color-foreground: oklch(0.985 0 0);
+	--color-card: oklch(0.18 0.005 264);          /* zinc-900 */
+	--color-card-foreground: oklch(0.985 0 0);
+	--color-popover: oklch(0.18 0.005 264);
+	--color-popover-foreground: oklch(0.985 0 0);
+	--color-primary: oklch(0.985 0 0);
+	--color-primary-foreground: oklch(0.205 0.005 264);
+	--color-secondary: oklch(0.245 0.005 264);
+	--color-secondary-foreground: oklch(0.985 0 0);
+	--color-muted: oklch(0.245 0.005 264);
+	--color-muted-foreground: oklch(0.708 0.006 264);
+	--color-accent: oklch(0.245 0.005 264);
+	--color-accent-foreground: oklch(0.985 0 0);
+	--color-destructive: oklch(0.65 0.21 25);
+	--color-destructive-foreground: oklch(0.985 0 0);
+	--color-border: oklch(1 0 0 / 0.1);
+	--color-input: oklch(1 0 0 / 0.15);
+	--color-ring: oklch(0.7 0.16 240);
 
-	--color-fg: oklch(0.97 0.005 260);
-	--color-fg-dim: oklch(0.78 0.012 260);
-	--color-fg-muted: oklch(0.62 0.014 260);
-	--color-fg-faint: oklch(0.46 0.014 260);
+	/* Restrained chart palette. */
+	--color-chart-1: oklch(0.7 0.16 240);   /* blue */
+	--color-chart-2: oklch(0.74 0.14 162);  /* mint */
+	--color-chart-3: oklch(0.78 0.14 56);   /* amber */
+	--color-chart-4: oklch(0.72 0.16 304);  /* violet */
+	--color-chart-5: oklch(0.7 0.18 18);    /* rose */
 
-	--color-border: oklch(1 0 0 / 0.07);
-	--color-border-strong: oklch(1 0 0 / 0.13);
-	--color-border-bright: oklch(1 0 0 / 0.22);
-
-	/* Luminous data accents. */
-	--color-accent: oklch(0.82 0.16 196);        /* cyan */
-	--color-accent-soft: oklch(0.82 0.16 196 / 0.18);
-	--color-warm: oklch(0.78 0.16 56);           /* amber */
-	--color-warm-soft: oklch(0.78 0.16 56 / 0.18);
-	--color-violet: oklch(0.74 0.18 304);
-	--color-rose: oklch(0.72 0.2 18);
-	--color-mint: oklch(0.82 0.15 162);
-	--color-positive: oklch(0.82 0.15 162);
-	--color-negative: oklch(0.72 0.2 18);
-
-	--color-chart-1: oklch(0.82 0.16 196);
-	--color-chart-2: oklch(0.74 0.18 304);
-	--color-chart-3: oklch(0.78 0.16 56);
-	--color-chart-4: oklch(0.82 0.15 162);
-	--color-chart-5: oklch(0.72 0.2 18);
-	--color-chart-6: oklch(0.7 0.13 240);
-	--color-chart-7: oklch(0.85 0.13 95);
-	--color-chart-8: oklch(0.7 0.16 340);
-
-	--color-destructive: oklch(0.7 0.2 18);
-	--color-primary: oklch(0.82 0.16 196);
-	--color-primary-foreground: oklch(0.18 0.012 260);
-
-	/* Legacy aliases so older shadcn-style classes keep working in dark. */
-	--color-background: var(--color-bg);
-	--color-foreground: var(--color-fg);
-	--color-muted: var(--color-bg-elevated);
-	--color-muted-foreground: var(--color-fg-muted);
-
-	--shadow-glow: 0 0 0 1px oklch(1 0 0 / 0.04), 0 30px 80px -20px oklch(0 0 0 / 0.5);
-	--shadow-card: 0 1px 0 oklch(1 0 0 / 0.04) inset, 0 18px 60px -28px oklch(0 0 0 / 0.7);
-
-	--radius-sm: 6px;
-	--radius-md: 10px;
-	--radius-lg: 14px;
-	--radius-xl: 20px;
-
-	--ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+	--radius: 0.625rem;
 }
 
 @layer base {
@@ -78,46 +52,21 @@
 
 	html, body {
 		min-height: 100%;
-		background: var(--color-bg);
-		color: var(--color-fg);
+		background: var(--color-background);
+		color: var(--color-foreground);
 	}
 
 	body {
 		font-family: var(--font-sans);
-		font-feature-settings: "ss01", "cv11";
 		-webkit-font-smoothing: antialiased;
 		text-rendering: optimizeLegibility;
-		background:
-			radial-gradient(1200px 600px at 12% -10%, oklch(0.4 0.13 260 / 0.18), transparent 60%),
-			radial-gradient(900px 600px at 105% 0%, oklch(0.6 0.16 196 / 0.10), transparent 55%),
-			radial-gradient(900px 700px at 50% 110%, oklch(0.5 0.16 304 / 0.08), transparent 60%),
-			var(--color-bg);
+		font-feature-settings: "cv11";
 	}
-
-	/* Subtle film grain to kill banding on dark gradients. */
-	body::before {
-		content: "";
-		position: fixed;
-		inset: 0;
-		pointer-events: none;
-		z-index: 0;
-		opacity: 0.05;
-		mix-blend-mode: overlay;
-		background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.6 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
-	}
-
-	body > * { position: relative; z-index: 1; }
 
 	button, input, select, textarea { font: inherit; color: inherit; }
 
-	::selection { background: var(--color-accent); color: var(--color-primary-foreground); }
+	::selection { background: oklch(0.7 0.16 240 / 0.4); }
 
-	/* Tabular numerals everywhere data is shown. */
-	.tabular { font-variant-numeric: tabular-nums; }
-	.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
-	.display { font-family: var(--font-display); font-feature-settings: "ss01"; letter-spacing: -0.01em; }
-
-	/* Scrollbars on dark surfaces. */
 	* {
 		scrollbar-color: oklch(1 0 0 / 0.18) transparent;
 		scrollbar-width: thin;
@@ -129,74 +78,51 @@
 		border: 2px solid transparent;
 		background-clip: padding-box;
 	}
-	*::-webkit-scrollbar-thumb:hover { background: oklch(1 0 0 / 0.22); background-clip: padding-box; border: 2px solid transparent; }
+	*::-webkit-scrollbar-thumb:hover {
+		background: oklch(1 0 0 / 0.22);
+		background-clip: padding-box;
+		border: 2px solid transparent;
+	}
 
 	:focus-visible {
-		outline: 2px solid var(--color-accent);
+		outline: 2px solid var(--color-ring);
 		outline-offset: 2px;
 		border-radius: 4px;
 	}
 
-	/* Recharts tweaks: dark axes/grid. */
+	/* Recharts dark theming. */
 	.recharts-cartesian-axis line,
 	.recharts-cartesian-axis-tick-line { stroke: var(--color-border); }
-	.recharts-cartesian-axis-tick-value { fill: var(--color-fg-muted); font-size: 11px; font-family: var(--font-mono); }
-	.recharts-cartesian-grid line { stroke: var(--color-bg-grid); }
-	.recharts-tooltip-wrapper:focus-visible { outline: none; }
+	.recharts-cartesian-axis-tick-value {
+		fill: var(--color-muted-foreground);
+		font-size: 11px;
+		font-family: var(--font-sans);
+		font-variant-numeric: tabular-nums;
+	}
+	.recharts-cartesian-grid line { stroke: var(--color-border); }
 	.recharts-default-tooltip { display: none !important; }
 	.recharts-surface { overflow: visible; }
 }
 
-@utility glass {
-	background: linear-gradient(180deg, oklch(1 0 0 / 0.04), oklch(1 0 0 / 0.015)), var(--color-bg-elevated);
-	border: 1px solid var(--color-border);
-	box-shadow: var(--shadow-card);
-	backdrop-filter: blur(14px) saturate(140%);
-}
-
-@utility glass-strong {
-	background: linear-gradient(180deg, oklch(1 0 0 / 0.06), oklch(1 0 0 / 0.02)), var(--color-bg-elevated);
-	border: 1px solid var(--color-border-strong);
-	box-shadow: var(--shadow-glow);
-	backdrop-filter: blur(20px) saturate(160%);
-}
-
-@utility hairline {
-	box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.05);
-}
-
 @layer utilities {
-	.bg-bg { background-color: var(--color-bg); }
-	.bg-elevated { background-color: var(--color-bg-elevated); }
-	.text-fg { color: var(--color-fg); }
-	.text-dim { color: var(--color-fg-dim); }
-	.text-muted { color: var(--color-fg-muted); }
-	.text-faint { color: var(--color-fg-faint); }
-	.border-soft { border-color: var(--color-border); }
-	.border-strong { border-color: var(--color-border-strong); }
+	.tabular { font-variant-numeric: tabular-nums; }
 
-	@keyframes rise {
-		from { opacity: 0; transform: translateY(8px); }
-		to { opacity: 1; transform: translateY(0); }
-	}
-	@keyframes pulse-dot {
-		0%, 100% { opacity: 1; transform: scale(1); }
-		50% { opacity: 0.4; transform: scale(0.85); }
-	}
 	@keyframes shimmer {
 		0% { background-position: -200% 0; }
 		100% { background-position: 200% 0; }
 	}
-
-	.animate-rise { animation: rise 600ms var(--ease-out-quint) both; }
-	.animate-pulse-dot { animation: pulse-dot 1.6s ease-in-out infinite; }
 	.animate-shimmer {
 		background: linear-gradient(90deg, transparent, oklch(1 0 0 / 0.06), transparent);
 		background-size: 200% 100%;
 		animation: shimmer 1.6s linear infinite;
 	}
+	@keyframes pulse-dot {
+		0%, 100% { opacity: 1; }
+		50% { opacity: 0.4; }
+	}
+	.animate-pulse-dot { animation: pulse-dot 1.6s ease-in-out infinite; }
 
 	@media (prefers-reduced-motion: reduce) {
-		.animate-rise, .animate-pulse-dot, .animate-shimmer { animation: none !important; }
+		.animate-shimmer, .animate-pulse-dot { animation: none !important; }
 	}
 }

@@ -12,16 +12,16 @@ export function ConfirmDialog(props: {
 	return (
 		<Dialog.Root open={props.open} onOpenChange={props.onOpenChange}>
 			<Dialog.Portal>
-				<Dialog.Backdrop className="fixed inset-0 bg-[oklch(0_0_0_/_0.55)] backdrop-blur-sm" />
-				<Dialog.Viewport className="fixed inset-0 flex items-center justify-center p-4">
-					<Dialog.Popup className="glass-strong w-full max-w-md rounded-[var(--radius-xl)] p-6">
-						<Dialog.Title className="display text-fg text-lg">
+				<Dialog.Backdrop className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm" />
+				<Dialog.Viewport className="fixed inset-0 z-50 flex items-center justify-center p-4">
+					<Dialog.Popup className="w-full max-w-md rounded-lg border border-border bg-card p-6 shadow-lg">
+						<Dialog.Title className="font-semibold text-base leading-none tracking-tight">
 							{props.title}
 						</Dialog.Title>
-						<Dialog.Description className="mt-2 text-muted text-sm">
+						<Dialog.Description className="mt-2 text-muted-foreground text-sm">
 							{props.description}
 						</Dialog.Description>
-						<div className={cn("mt-5 flex justify-end gap-2")}>
+						<div className={cn("mt-6 flex justify-end gap-2")}>
 							{props.children}
 						</div>
 					</Dialog.Popup>
@@ -33,9 +33,7 @@ export function ConfirmDialog(props: {
 
 export const DialogClose = Dialog.Close;
 
-/**
- * Side-anchored drawer used for event detail. Slides in from the right.
- */
+/** Side-anchored sheet, used for event detail. */
 export function Drawer(props: {
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
@@ -47,29 +45,29 @@ export function Drawer(props: {
 	return (
 		<Dialog.Root open={props.open} onOpenChange={props.onOpenChange}>
 			<Dialog.Portal>
-				<Dialog.Backdrop className="fixed inset-0 bg-[oklch(0_0_0_/_0.55)] backdrop-blur-sm data-[starting-style]:opacity-0 data-[ending-style]:opacity-0 transition-opacity duration-300" />
-				<Dialog.Viewport className="fixed inset-0 flex justify-end p-3 sm:p-4">
+				<Dialog.Backdrop className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm transition-opacity duration-200 data-[ending-style]:opacity-0 data-[starting-style]:opacity-0" />
+				<Dialog.Viewport className="fixed inset-0 z-50 flex justify-end">
 					<Dialog.Popup
-						style={{ width: props.width ?? "min(560px, 100%)" }}
-						className="glass-strong flex h-full flex-col overflow-hidden rounded-[var(--radius-xl)] data-[starting-style]:translate-x-6 data-[starting-style]:opacity-0 data-[ending-style]:translate-x-6 data-[ending-style]:opacity-0 transition-[transform,opacity] duration-300 ease-[var(--ease-out-quint)]"
+						style={{ width: props.width ?? "min(540px, 100%)" }}
+						className="flex h-full flex-col overflow-hidden border-border border-l bg-card shadow-2xl transition-transform duration-200 data-[ending-style]:translate-x-full data-[starting-style]:translate-x-full"
 					>
 						{props.title || props.subtitle ? (
-							<div className="flex items-start justify-between gap-3 border-b border-[var(--color-border)] px-6 pt-5 pb-4">
+							<div className="flex items-start justify-between gap-3 border-border border-b px-6 py-4">
 								<div>
 									{props.title ? (
-										<Dialog.Title className="display text-fg text-lg leading-tight">
+										<Dialog.Title className="font-semibold text-base leading-none tracking-tight">
 											{props.title}
 										</Dialog.Title>
 									) : null}
 									{props.subtitle ? (
-										<Dialog.Description className="mt-1 text-muted text-xs">
+										<Dialog.Description className="mt-1.5 text-muted-foreground text-xs">
 											{props.subtitle}
 										</Dialog.Description>
 									) : null}
 								</div>
 								<Dialog.Close
 									aria-label="Close"
-									className="rounded-md p-1 text-muted hover:bg-[oklch(1_0_0_/_0.06)] hover:text-fg"
+									className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
 								>
 									<svg
 										xmlns="http://www.w3.org/2000/svg"

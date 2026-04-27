@@ -8,13 +8,26 @@ import {
 import { Upload } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { DashboardCharts } from "~/components/dashboard-charts";
+import { Badge } from "~/components/ui/badge";
 import { Button, GhostButton, SecondaryButton } from "~/components/ui/button";
-import { Card, CardContent, SectionHeader } from "~/components/ui/card";
-import { Chip } from "~/components/ui/chip";
+import {
+	Card,
+	CardContent,
+	CardDescription,
+	CardHeader,
+	CardTitle,
+} from "~/components/ui/card";
 import { Drawer } from "~/components/ui/dialog";
 import { Input, Label, Select } from "~/components/ui/form";
-import { Segmented } from "~/components/ui/segmented";
-import { Sparkline } from "~/components/ui/sparkline";
+import {
+	Table,
+	TableBody,
+	TableCell,
+	TableHead,
+	TableHeader,
+	TableRow,
+} from "~/components/ui/table";
+import { Tabs } from "~/components/ui/tabs";
 import type {
 	DashboardData,
 	DashboardEvent,
@@ -30,7 +43,6 @@ import {
 	formatRelative,
 } from "~/lib/format";
 import { getDashboard, getSession, importTelemetryJsonl } from "~/lib/server";
-import { useCountUp } from "~/lib/use-count-up";
 import { cn } from "~/lib/utils";
 
 export const Route = createFileRoute("/dashboard")({
@@ -59,14 +71,22 @@ function stringSearch(value: unknown) {
 }
 
 const PRESETS = [
-	{ value: "24h", label: "24H", days: 1 },
-	{ value: "7d", label: "7D", days: 7 },
-	{ value: "30d", label: "30D", days: 30 },
-	{ value: "90d", label: "90D", days: 90 },
+	{ value: "24h", label: "24h", days: 1 },
+	{ value: "7d", label: "7d", days: 7 },
+	{ value: "30d", label: "30d", days: 30 },
+	{ value: "90d", label: "90d", days: 90 },
 	{ value: "all", label: "All", days: 0 },
-	{ value: "custom", label: "Custom", days: -1 },
 ] as const;
-type PresetValue = (typeof PRESETS)[number]["value"];
+type PresetValue = (typeof PRESETS)[number]["value"] | "custom";
+
+const FILTER_KEYS = [
+	"team",
+	"project",
+	"developer",
+	"model",
+	"provider",
+] as const;
+const PAGE_SIZE = 10;
 
 function DashboardPage() {
 	const data = Route.useLoaderData();
@@ -76,10 +96,14 @@ function DashboardPage() {
 	const [importResult, setImportResult] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
 	const [drawerEvent, setDrawerEvent] = useState<DashboardEvent | null>(null);
+	const [page, setPage] = useState(0);
 
 	const activePreset = derivePreset(search);
+	const activeFilters = FILTER_KEYS.flatMap((key) => {
+		const value = search[key];
+		return value ? [{ key, value }] : [];
+	});
 
-	// Live refresh every 30s when tab visible.
 	useEffect(() => {
 		const id = window.setInterval(() => {
 			if (document.visibilityState === "visible") {
@@ -90,15 +114,9 @@ function DashboardPage() {
 	}, [router]);
 
 	function applyPreset(value: PresetValue) {
-		if (value === "custom") {
-			void navigate({
-				search: { ...search, from: search.from, to: search.to },
-			});
-			return;
-		}
+		if (value === "custom") return;
 		if (value === "all") {
-			const { from: _f, to: _t, ...rest } = search;
-			void navigate({ search: rest });
+			void navigate({ search: { ...stripDates(search) } });
 			return;
 		}
 		const days = PRESETS.find((p) => p.value === value)?.days ?? 7;
@@ -107,59 +125,120 @@ function DashboardPage() {
 		void navigate({ search: { ...search, from, to } });
 	}
 
-	function clearFilter(key: keyof DashboardFilters) {
-		const next = { ...search };
-		delete next[key];
-		void navigate({ search: next });
-	}
-
-	const activeChips: Array<[keyof DashboardFilters, string]> = (
-		[
-			["team", search.team],
-			["project", search.project],
-			["developer", search.developer],
-			["model", search.model],
-			["provider", search.provider],
-		] as Array<[keyof DashboardFilters, string | undefined]>
-	).filter((entry): entry is [keyof DashboardFilters, string] =>
-		Boolean(entry[1]),
+	const totalPages = Math.max(1, Math.ceil(data.events.length / PAGE_SIZE));
+	const currentPage = Math.min(page, totalPages - 1);
+	const pagedEvents = data.events.slice(
+		currentPage * PAGE_SIZE,
+		(currentPage + 1) * PAGE_SIZE,
 	);
 
 	return (
-		<div className="min-h-screen">
+		<div className="min-h-screen bg-background">
 			<TopBar />
-			<main className="mx-auto w-full max-w-[1320px] space-y-6 px-4 pb-16 sm:px-6 lg:px-8">
-				<SectionHeader
-					eyebrow={`Window · ${data.window.days} day${data.window.days === 1 ? "" : "s"}`}
-					title="Telemetry overview"
-					subtitle="Pi consumption across teams, projects, and models — refreshed every 30 seconds."
-					right={
-						<Segmented
-							value={activePreset}
-							options={PRESETS.map((p) => ({ value: p.value, label: p.label }))}
-							onChange={(value) => applyPreset(value as PresetValue)}
-							ariaLabel="Time range"
-						/>
-					}
-					className="pt-8"
-				/>
+			<main className="mx-auto w-full max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
+				<header className="flex flex-wrap items-end justify-between gap-3">
+					<div>
+						<h1 className="font-semibold text-2xl tracking-tight">Dashboard</h1>
+						<p className="mt-1 text-muted-foreground text-sm">
+							Pi consumption across teams, projects, and models.
+						</p>
+					</div>
+					<Tabs
+						value={activePreset === "custom" ? "all" : activePreset}
+						options={PRESETS.map((p) => ({ value: p.value, label: p.label }))}
+						onChange={(v) => applyPreset(v as PresetValue)}
+						ariaLabel="Time range"
+					/>
+				</header>
 
-				<KpiStrip data={data} />
+				<KpiGrid data={data} />
 
 				<FilterBar
 					data={data}
 					search={search}
-					activeChips={activeChips}
-					onClearFilter={clearFilter}
-					onApply={(next) => navigate({ search: next })}
+					activeFilters={activeFilters}
+					onChange={(next) => navigate({ search: next })}
 				/>
 
 				<DashboardCharts data={data} />
 
-				<EventsCard
-					events={data.events}
-					onSelect={(event) => setDrawerEvent(event)}
-				/>
+				<Card>
+					<CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
+						<div className="space-y-1.5">
+							<CardTitle>Recent events</CardTitle>
+							<CardDescription>
+								{data.events.length} latest turn
+								{data.events.length === 1 ? "" : "s"}. Click a row for the full
+								payload.
+							</CardDescription>
+						</div>
+					</CardHeader>
+					<CardContent className="px-0">
+						<Table>
+							<TableHeader>
+								<TableRow className="hover:bg-transparent">
+									<TableHead className="pl-6">When</TableHead>
+									<TableHead>Developer</TableHead>
+									<TableHead>Project</TableHead>
+									<TableHead>Model</TableHead>
+									<TableHead className="text-right">Tokens</TableHead>
+									<TableHead className="pr-6 text-right">Cost</TableHead>
+								</TableRow>
+							</TableHeader>
+							<TableBody>
+								{pagedEvents.length === 0 ? (
+									<TableRow>
+										<TableCell
+											colSpan={6}
+											className="h-24 text-center text-muted-foreground"
+										>
+											No events yet. Once pi-telemetry-minimal posts a turn it
+											will land here.
+										</TableCell>
+									</TableRow>
+								) : (
+									pagedEvents.map((event) => (
+										<EventRow
+											key={event.id}
+											event={event}
+											onSelect={() => setDrawerEvent(event)}
+										/>
+									))
+								)}
+							</TableBody>
+						</Table>
+					</CardContent>
+					{data.events.length > PAGE_SIZE ? (
+						<div className="flex items-center justify-between border-border border-t px-6 py-3 text-sm">
+							<p className="text-muted-foreground text-xs">
+								Page {currentPage + 1} of {totalPages} · showing{" "}
+								{currentPage * PAGE_SIZE + 1}–
+								{Math.min((currentPage + 1) * PAGE_SIZE, data.events.length)} of{" "}
+								{data.events.length}
+							</p>
+							<div className="flex gap-2">
+								<SecondaryButton
+									type="button"
+									size="sm"
+									disabled={currentPage === 0}
+									onClick={() => setPage((p) => Math.max(0, p - 1))}
+								>
+									Previous
+								</SecondaryButton>
+								<SecondaryButton
+									type="button"
+									size="sm"
+									disabled={currentPage >= totalPages - 1}
+									onClick={() =>
+										setPage((p) => Math.min(totalPages - 1, p + 1))
+									}
+								>
+									Next
+								</SecondaryButton>
+							</div>
+						</div>
+					) : null}
+				</Card>
 
 				<ImportCard
 					busy={busy}
@@ -198,39 +277,32 @@ function DashboardPage() {
 
 function TopBar() {
 	return (
-		<header className="sticky top-0 z-30 border-b border-[var(--color-border)] bg-[oklch(0.16_0.012_260_/_0.7)] backdrop-blur-xl">
-			<div className="mx-auto flex w-full max-w-[1320px] items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
+		<header className="sticky top-0 z-30 border-border border-b bg-background/80 backdrop-blur">
+			<div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
 				<Link to="/dashboard" className="flex items-center gap-2.5">
-					<span className="grid h-8 w-8 place-items-center rounded-[10px] border border-[var(--color-border-strong)] bg-[oklch(1_0_0_/_0.04)]">
-						<span className="display text-[18px] text-fg leading-none">π</span>
+					<span className="grid h-7 w-7 place-items-center rounded-md bg-foreground text-background">
+						<span className="font-semibold text-sm leading-none">π</span>
 					</span>
-					<span className="hidden flex-col leading-tight sm:flex">
-						<span className="display text-[15px] text-fg">Pi Telemetry</span>
-						<span className="mono text-[9.5px] text-faint uppercase tracking-[0.2em]">
-							pi-telemetry-minimal
-						</span>
-					</span>
+					<span className="font-semibold text-sm">Pi Telemetry</span>
 				</Link>
 				<nav className="flex items-center gap-1">
 					<Link
 						to="/dashboard"
-						className="mono rounded-md px-3 py-1.5 text-[11px] uppercase tracking-[0.18em] text-fg [&.active]:bg-[oklch(1_0_0_/_0.06)]"
+						className="rounded-md px-3 py-1.5 font-medium text-sm text-muted-foreground transition-colors hover:text-foreground [&.active]:bg-accent [&.active]:text-foreground"
 						activeProps={{ className: "active" }}
 					>
 						Dashboard
 					</Link>
 					<Link
 						to="/settings"
-						className="mono rounded-md px-3 py-1.5 text-[11px] uppercase tracking-[0.18em] text-faint hover:text-dim [&.active]:bg-[oklch(1_0_0_/_0.06)] [&.active]:text-fg"
+						className="rounded-md px-3 py-1.5 font-medium text-sm text-muted-foreground transition-colors hover:text-foreground [&.active]:bg-accent [&.active]:text-foreground"
 						activeProps={{ className: "active" }}
 					>
 						Settings
 					</Link>
-					<span className="ml-3 inline-flex items-center gap-1.5">
-						<span className="inline-block h-1.5 w-1.5 animate-pulse-dot rounded-full bg-[var(--color-positive)]" />
-						<span className="mono text-[10px] text-faint uppercase tracking-[0.2em]">
-							Live
-						</span>
+					<span className="ml-3 hidden items-center gap-1.5 sm:inline-flex">
+						<span className="inline-block h-1.5 w-1.5 animate-pulse-dot rounded-full bg-emerald-500" />
+						<span className="text-muted-foreground text-xs">Live</span>
 					</span>
 				</nav>
 			</div>
@@ -238,57 +310,45 @@ function TopBar() {
 	);
 }
 
-/* ───────────────────────── KPI strip ─────────────────────────────── */
+/* ───────────────────────── KPIs ──────────────────────────────────── */
 
-function KpiStrip({ data }: { data: DashboardData }) {
-	const sums = data.series;
-	const series = (key: "turns" | "tokens" | "cost") => sums.map((r) => r[key]);
+function KpiGrid({ data }: { data: DashboardData }) {
 	const items = [
 		{
 			label: "Turns",
 			value: data.summary.turns,
 			previous: data.previous.turns,
 			format: formatCount,
-			spark: series("turns"),
-			color: "var(--color-chart-1)",
 		},
 		{
 			label: "Tokens",
 			value: data.summary.tokens,
 			previous: data.previous.tokens,
 			format: formatCompact,
-			spark: series("tokens"),
-			color: "var(--color-chart-2)",
 		},
 		{
 			label: "Cost",
 			value: data.summary.cost,
 			previous: data.previous.cost,
 			format: formatCost,
-			spark: series("cost"),
-			color: "var(--color-chart-3)",
 		},
 		{
 			label: "Developers",
 			value: data.summary.developers,
 			previous: data.previous.developers,
 			format: formatCount,
-			spark: [],
-			color: "var(--color-chart-4)",
 		},
 		{
 			label: "Projects",
 			value: data.summary.projects,
 			previous: data.previous.projects,
 			format: formatCount,
-			spark: [],
-			color: "var(--color-chart-6)",
 		},
 	];
 	return (
-		<section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-			{items.map((item, i) => (
-				<KpiCard key={item.label} {...item} index={i} />
+		<section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+			{items.map((item) => (
+				<KpiCard key={item.label} {...item} />
 			))}
 		</section>
 	);
@@ -299,55 +359,38 @@ function KpiCard({
 	value,
 	previous,
 	format,
-	spark,
-	color,
-	index,
 }: {
 	label: string;
 	value: number;
 	previous: number;
 	format: (n: number) => string;
-	spark: number[];
-	color: string;
-	index: number;
 }) {
-	const animated = useCountUp(value);
 	const delta = deltaPercent(value, previous);
-	const tone =
+	const variant =
 		delta === null
-			? "default"
+			? "muted"
 			: delta > 1
 				? "positive"
 				: delta < -1
 					? "negative"
-					: "default";
+					: "muted";
 	return (
-		<Card
-			className="animate-rise"
-			style={{ animationDelay: `${index * 60}ms` } as React.CSSProperties}
-		>
-			<CardContent className="px-5 pt-4 pb-4">
-				<div className="flex items-start justify-between">
-					<p className="mono text-[10.5px] text-faint uppercase tracking-[0.22em]">
-						{label}
-					</p>
-					{delta !== null ? (
-						<Chip tone={tone}>
-							<TrendArrow positive={delta >= 0} /> {formatPercent(delta)}
-						</Chip>
-					) : null}
-				</div>
-				<p className="display mt-3 text-fg text-[28px] leading-none tracking-tight tabular">
-					{format(animated)}
+		<Card>
+			<CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
+				<CardDescription className="text-sm">{label}</CardDescription>
+				{delta !== null ? (
+					<Badge variant={variant}>
+						<TrendArrow positive={delta >= 0} /> {formatPercent(delta)}
+					</Badge>
+				) : null}
+			</CardHeader>
+			<CardContent>
+				<p className="font-semibold text-2xl tabular tracking-tight">
+					{format(value)}
 				</p>
-				<div className="mt-3 flex items-end justify-between gap-2">
-					<p className="mono whitespace-nowrap text-[10px] text-faint tracking-[0.12em]">
-						prev {format(previous)}
-					</p>
-					{spark.length ? (
-						<Sparkline values={spark} stroke={color} fill={color} width={96} />
-					) : null}
-				</div>
+				<p className="mt-1 text-muted-foreground text-xs">
+					vs {format(previous)} previous period
+				</p>
 			</CardContent>
 		</Card>
 	);
@@ -356,8 +399,8 @@ function KpiCard({
 function TrendArrow({ positive }: { positive: boolean }) {
 	return (
 		<svg
-			width="9"
-			height="9"
+			width="10"
+			height="10"
 			viewBox="0 0 12 12"
 			fill="none"
 			stroke="currentColor"
@@ -377,71 +420,86 @@ function TrendArrow({ positive }: { positive: boolean }) {
 function FilterBar({
 	data,
 	search,
-	activeChips,
-	onClearFilter,
-	onApply,
+	activeFilters,
+	onChange,
 }: {
 	data: DashboardData;
 	search: DashboardFilters;
-	activeChips: Array<[keyof DashboardFilters, string]>;
-	onClearFilter: (key: keyof DashboardFilters) => void;
-	onApply: (next: DashboardFilters) => void;
+	activeFilters: Array<{ key: keyof DashboardFilters; value: string }>;
+	onChange: (next: DashboardFilters) => void;
 }) {
 	const [expanded, setExpanded] = useState(false);
+	const hasAny = activeFilters.length > 0 || search.from || search.to;
 	return (
 		<Card>
-			<CardContent className="px-5 py-4">
-				<div className="flex flex-wrap items-center justify-between gap-3">
-					<div className="flex flex-wrap items-center gap-2">
-						<Label>Filters</Label>
-						{activeChips.length === 0 ? (
-							<span className="mono text-[10.5px] text-faint uppercase tracking-[0.18em]">
-								None active
+			<CardContent className="px-4 py-3 sm:px-6">
+				<div className="flex flex-wrap items-center gap-2">
+					<div className="flex flex-1 flex-wrap items-center gap-2">
+						{!hasAny ? (
+							<span className="text-muted-foreground text-sm">
+								No filters applied
 							</span>
 						) : (
-							activeChips.map(([key, value]) => (
-								<Chip
-									key={`${key}-${value}`}
-									tone="accent"
-									onRemove={() => onClearFilter(key)}
-								>
-									{key}: {value}
-								</Chip>
-							))
+							<>
+								{search.from || search.to ? (
+									<Badge variant="secondary" className="gap-1.5">
+										{search.from ?? "…"} → {search.to ?? "…"}
+										<button
+											type="button"
+											aria-label="Clear date range"
+											onClick={() => onChange(stripDates(search))}
+											className="ml-0.5 rounded-sm text-muted-foreground hover:text-foreground"
+										>
+											<X />
+										</button>
+									</Badge>
+								) : null}
+								{activeFilters.map(({ key, value }) => (
+									<Badge
+										key={`${key}-${value}`}
+										variant="secondary"
+										className="gap-1.5"
+									>
+										<span className="text-muted-foreground capitalize">
+											{key}:
+										</span>
+										<span>{value}</span>
+										<button
+											type="button"
+											aria-label={`Clear ${key}`}
+											onClick={() => onChange({ ...search, [key]: undefined })}
+											className="ml-0.5 rounded-sm text-muted-foreground hover:text-foreground"
+										>
+											<X />
+										</button>
+									</Badge>
+								))}
+							</>
 						)}
-						{search.from || search.to ? (
-							<Chip
-								tone="default"
-								onRemove={() =>
-									onApply({ ...search, from: undefined, to: undefined })
-								}
-							>
-								{search.from ?? "…"} → {search.to ?? "…"}
-							</Chip>
-						) : null}
 					</div>
 					<div className="flex items-center gap-2">
-						<GhostButton
-							type="button"
-							onClick={() => setExpanded((v) => !v)}
-							aria-expanded={expanded}
-						>
-							{expanded ? "Hide" : "Refine"}
-						</GhostButton>
-						{activeChips.length || search.from || search.to ? (
-							<GhostButton type="button" onClick={() => onApply({})}>
+						{hasAny ? (
+							<GhostButton type="button" size="sm" onClick={() => onChange({})}>
 								Reset
 							</GhostButton>
 						) : null}
+						<SecondaryButton
+							type="button"
+							size="sm"
+							onClick={() => setExpanded((v) => !v)}
+							aria-expanded={expanded}
+						>
+							{expanded ? "Hide filters" : "Add filters"}
+						</SecondaryButton>
 					</div>
 				</div>
 				{expanded ? (
 					<form
-						className="mt-4 grid gap-3 border-[var(--color-border)] border-t pt-4 md:grid-cols-4 lg:grid-cols-7"
+						className="mt-4 grid gap-4 border-border border-t pt-4 md:grid-cols-4 lg:grid-cols-7"
 						onSubmit={(event) => {
 							event.preventDefault();
 							const form = new FormData(event.currentTarget);
-							onApply({
+							onChange({
 								from: formString(form, "from"),
 								to: formString(form, "to"),
 								team: formString(form, "team"),
@@ -450,12 +508,13 @@ function FilterBar({
 								model: formString(form, "model"),
 								provider: formString(form, "provider"),
 							});
+							setExpanded(false);
 						}}
 					>
-						<Field label="From">
+						<Field name="from" label="From">
 							<Input name="from" type="date" defaultValue={search.from ?? ""} />
 						</Field>
-						<Field label="To">
+						<Field name="to" label="To">
 							<Input name="to" type="date" defaultValue={search.to ?? ""} />
 						</Field>
 						<OptionField
@@ -490,7 +549,7 @@ function FilterBar({
 						/>
 						<div className="flex items-end gap-2 md:col-span-4 lg:col-span-7">
 							<Button type="submit">Apply</Button>
-							<SecondaryButton type="button" onClick={() => onApply({})}>
+							<SecondaryButton type="button" onClick={() => onChange({})}>
 								Reset
 							</SecondaryButton>
 						</div>
@@ -501,16 +560,36 @@ function FilterBar({
 	);
 }
 
+function X() {
+	return (
+		<svg
+			width="10"
+			height="10"
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			strokeWidth="2.4"
+			strokeLinecap="round"
+			aria-hidden
+		>
+			<title>remove</title>
+			<path d="M18 6 6 18M6 6l12 12" />
+		</svg>
+	);
+}
+
 function Field({
+	name,
 	label,
 	children,
 }: {
+	name: string;
 	label: string;
 	children: React.ReactNode;
 }) {
 	return (
-		<div className="space-y-1.5">
-			<Label>{label}</Label>
+		<div className="space-y-2">
+			<Label htmlFor={`f-${name}`}>{label}</Label>
 			{children}
 		</div>
 	);
@@ -523,8 +602,12 @@ function OptionField(props: {
 	options: string[];
 }) {
 	return (
-		<Field label={props.label}>
-			<Select name={props.name} defaultValue={props.value ?? ""}>
+		<Field name={props.name} label={props.label}>
+			<Select
+				id={`f-${props.name}`}
+				name={props.name}
+				defaultValue={props.value ?? ""}
+			>
 				<option value="">All</option>
 				{props.options.map((option) => (
 					<option key={option} value={option}>
@@ -536,86 +619,18 @@ function OptionField(props: {
 	);
 }
 
-/* ───────────────────────── Events table ──────────────────────────── */
-
-function EventsCard({
-	events,
-	onSelect,
-}: {
-	events: DashboardEvent[];
-	onSelect: (event: DashboardEvent) => void;
-}) {
-	return (
-		<Card>
-			<div className="flex items-end justify-between gap-3 px-6 pt-5 pb-2">
-				<div>
-					<p className="mono text-[10.5px] text-faint uppercase tracking-[0.22em]">
-						Stream
-					</p>
-					<h2 className="display mt-1 text-[1.05rem] text-fg leading-tight tracking-tight">
-						Recent events
-					</h2>
-					<p className="mt-0.5 text-[12px] text-muted">
-						Newest 100 turns. Click a row for the full payload.
-					</p>
-				</div>
-				<span className="mono text-[10.5px] text-faint uppercase tracking-[0.18em]">
-					{events.length} shown
-				</span>
-			</div>
-			<div className="overflow-x-auto px-2 pb-4">
-				<table className="w-full min-w-[760px] text-left text-sm">
-					<thead>
-						<tr className="mono text-[10px] text-faint uppercase tracking-[0.18em]">
-							{["When", "Who", "Project", "Model", "Tokens", "Cost"].map(
-								(h) => (
-									<th key={h} className="px-3 py-2 font-normal">
-										{h}
-									</th>
-								),
-							)}
-						</tr>
-					</thead>
-					<tbody>
-						{events.length === 0 ? (
-							<tr>
-								<td
-									colSpan={6}
-									className="px-3 py-10 text-center text-muted text-sm"
-								>
-									No events yet — once pi-telemetry-minimal posts a turn it will
-									land here.
-								</td>
-							</tr>
-						) : (
-							events.map((event, i) => (
-								<EventRow
-									key={event.id}
-									event={event}
-									striped={i % 2 === 1}
-									onSelect={() => onSelect(event)}
-								/>
-							))
-						)}
-					</tbody>
-				</table>
-			</div>
-		</Card>
-	);
-}
+/* ───────────────────────── Events ────────────────────────────────── */
 
 function EventRow({
 	event,
-	striped,
 	onSelect,
 }: {
 	event: DashboardEvent;
-	striped: boolean;
 	onSelect: () => void;
 }) {
 	const ts = `${event.timestamp}Z`;
 	return (
-		<tr
+		<TableRow
 			tabIndex={0}
 			onClick={onSelect}
 			onKeyDown={(e) => {
@@ -624,55 +639,55 @@ function EventRow({
 					onSelect();
 				}
 			}}
-			className={cn(
-				"cursor-pointer border-[var(--color-border)] border-t transition hover:bg-[oklch(1_0_0_/_0.03)] focus-visible:bg-[oklch(1_0_0_/_0.05)]",
-				striped && "bg-[oklch(1_0_0_/_0.012)]",
-			)}
+			className="cursor-pointer"
 		>
-			<td className="px-3 py-2.5">
-				<div className="flex flex-col leading-tight">
-					<span className="text-fg text-sm">{formatRelative(ts)}</span>
-					<span className="mono text-[10.5px] text-faint">
+			<TableCell className="pl-6">
+				<div className="flex flex-col">
+					<span className="text-foreground text-sm">{formatRelative(ts)}</span>
+					<span className="text-[11px] text-muted-foreground">
 						{formatAbsolute(ts)}
 					</span>
 				</div>
-			</td>
-			<td className="px-3 py-2.5">
-				<div className="flex flex-col leading-tight">
-					<span className="text-fg text-sm">{event.developer ?? "—"}</span>
-					<span className="mono text-[10.5px] text-faint">
-						{event.team ?? "no team"}
+			</TableCell>
+			<TableCell>
+				<div className="flex flex-col">
+					<span className="text-foreground text-sm">
+						{event.developer ?? "—"}
 					</span>
+					{event.team ? (
+						<span className="text-[11px] text-muted-foreground">
+							{event.team}
+						</span>
+					) : null}
 				</div>
-			</td>
-			<td className="px-3 py-2.5">
-				<div className="flex flex-col leading-tight">
-					<span className="text-fg text-sm">
+			</TableCell>
+			<TableCell>
+				<div className="flex flex-col">
+					<span className="text-foreground text-sm">
 						{event.project ?? event.cwdName}
 					</span>
-					<span
-						className="mono truncate text-[10.5px] text-faint"
-						title={event.gitBranch ?? ""}
-					>
-						{event.gitBranch ?? "—"}
-					</span>
+					{event.gitBranch ? (
+						<span className="text-[11px] text-muted-foreground">
+							{event.gitBranch}
+						</span>
+					) : null}
 				</div>
-			</td>
-			<td className="px-3 py-2.5">
-				<div className="flex flex-col leading-tight">
-					<span className="mono text-fg text-[12px]">{event.model}</span>
-					<span className="mono text-[10.5px] text-faint">
+			</TableCell>
+			<TableCell>
+				<div className="flex flex-col">
+					<span className="text-foreground text-sm">{event.model}</span>
+					<span className="text-[11px] text-muted-foreground">
 						{event.provider}
 					</span>
 				</div>
-			</td>
-			<td className="mono px-3 py-2.5 text-fg text-sm">
+			</TableCell>
+			<TableCell className="text-right text-sm tabular">
 				{formatCompact(event.totalTokens)}
-			</td>
-			<td className="mono px-3 py-2.5 text-fg text-sm">
+			</TableCell>
+			<TableCell className="pr-6 text-right text-sm tabular">
 				{formatCost(event.costTotal ?? 0)}
-			</td>
-		</tr>
+			</TableCell>
+		</TableRow>
 	);
 }
 
@@ -703,7 +718,7 @@ function EventDrawer({
 			subtitle={event ? `${formatAbsolute(ts)} · ${formatRelative(ts)}` : ""}
 		>
 			{event ? (
-				<div className="space-y-5">
+				<div className="space-y-6">
 					<div className="grid grid-cols-2 gap-3">
 						<DetailStat
 							label="Tokens"
@@ -755,17 +770,17 @@ function EventDrawer({
 					</DetailGroup>
 
 					<details className="group">
-						<summary className="mono cursor-pointer list-none text-[10.5px] text-faint uppercase tracking-[0.2em] hover:text-dim">
-							<span className="inline-flex items-center gap-1">
+						<summary className="cursor-pointer list-none font-medium text-muted-foreground text-xs hover:text-foreground">
+							<span className="inline-flex items-center gap-1.5">
 								<svg
 									xmlns="http://www.w3.org/2000/svg"
-									width="9"
-									height="9"
+									width="10"
+									height="10"
 									viewBox="0 0 12 12"
 									fill="none"
 									stroke="currentColor"
 									strokeWidth="2"
-									className="transition group-open:rotate-90"
+									className="transition-transform group-open:rotate-90"
 								>
 									<title>toggle</title>
 									<path d="m4 2 4 4-4 4" />
@@ -773,7 +788,7 @@ function EventDrawer({
 								Raw payload
 							</span>
 						</summary>
-						<pre className="mono mt-2 max-h-72 overflow-auto rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[oklch(0_0_0_/_0.3)] p-3 text-[11px] text-dim leading-relaxed">
+						<pre className="mt-2 max-h-72 overflow-auto rounded-md border border-border bg-muted/40 p-3 font-mono text-[11px] text-foreground leading-relaxed">
 							{pretty}
 						</pre>
 					</details>
@@ -785,13 +800,9 @@ function EventDrawer({
 
 function DetailStat({ label, value }: { label: string; value: string }) {
 	return (
-		<div className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[oklch(1_0_0_/_0.02)] p-3">
-			<p className="mono text-[10px] text-faint uppercase tracking-[0.2em]">
-				{label}
-			</p>
-			<p className="display mt-1 text-fg text-lg leading-none tabular">
-				{value}
-			</p>
+		<div className="rounded-md border border-border bg-muted/30 p-3">
+			<p className="text-muted-foreground text-xs">{label}</p>
+			<p className="mt-1 font-semibold text-base tabular">{value}</p>
 		</div>
 	);
 }
@@ -805,10 +816,8 @@ function DetailGroup({
 }) {
 	return (
 		<div>
-			<p className="mono text-[10px] text-faint uppercase tracking-[0.2em]">
-				{label}
-			</p>
-			<div className="mt-2 space-y-1.5">{children}</div>
+			<h3 className="font-medium text-sm">{label}</h3>
+			<div className="mt-2 space-y-2">{children}</div>
 		</div>
 	);
 }
@@ -828,11 +837,11 @@ function DetailRow({
 }) {
 	return (
 		<div className="flex items-start justify-between gap-3 text-sm">
-			<span className="text-faint text-[12px]">{k}</span>
+			<span className="text-muted-foreground text-xs">{k}</span>
 			<span
 				className={cn(
-					"max-w-[68%] text-right text-fg",
-					mono && "mono text-[12px]",
+					"max-w-[68%] text-right text-foreground",
+					mono && "font-mono text-xs",
 					breakAll && "break-all",
 				)}
 			>
@@ -841,7 +850,7 @@ function DetailRow({
 					<button
 						type="button"
 						onClick={() => void navigator.clipboard.writeText(v)}
-						className="ml-2 align-middle text-faint hover:text-fg"
+						className="ml-2 align-middle text-muted-foreground hover:text-foreground"
 						aria-label="Copy"
 					>
 						<svg
@@ -878,19 +887,19 @@ function ImportCard({
 	const [hover, setHover] = useState(false);
 	return (
 		<Card>
-			<CardContent className="flex flex-col gap-4 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-				<div>
-					<p className="mono text-[10.5px] text-faint uppercase tracking-[0.22em]">
-						Import
-					</p>
-					<p className="mt-1 text-dim text-sm">
+			<CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
+				<div className="space-y-1.5">
+					<CardTitle>Import JSONL</CardTitle>
+					<CardDescription>
 						Upload an existing pi-telemetry-minimal{" "}
-						<span className="mono text-fg">events.jsonl</span>.
-					</p>
-					{result ? (
-						<p className="mt-1.5 text-[12px] text-muted">{result}</p>
-					) : null}
+						<code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">
+							events.jsonl
+						</code>
+						.
+					</CardDescription>
 				</div>
+			</CardHeader>
+			<CardContent>
 				<label
 					onDragEnter={(e) => {
 						e.preventDefault();
@@ -905,12 +914,11 @@ function ImportCard({
 						if (file) void onImport(file);
 					}}
 					className={cn(
-						"inline-flex cursor-pointer items-center gap-2 rounded-[var(--radius-md)] border border-[var(--color-border-strong)] border-dashed bg-[oklch(1_0_0_/_0.02)] px-4 py-2.5 text-sm text-dim transition hover:border-[var(--color-accent)] hover:bg-[var(--color-accent-soft)] hover:text-fg",
-						hover &&
-							"border-[var(--color-accent)] bg-[var(--color-accent-soft)] text-fg",
+						"flex cursor-pointer items-center justify-center gap-2 rounded-md border border-border border-dashed bg-muted/30 px-4 py-6 text-muted-foreground text-sm transition-colors hover:bg-muted/60 hover:text-foreground",
+						hover && "border-ring bg-muted/60 text-foreground",
 					)}
 				>
-					<Upload size={14} />
+					<Upload size={16} />
 					{busy ? "Importing…" : "Drop or choose .jsonl"}
 					<input
 						type="file"
@@ -924,6 +932,9 @@ function ImportCard({
 						}}
 					/>
 				</label>
+				{result ? (
+					<p className="mt-3 text-muted-foreground text-xs">{result}</p>
+				) : null}
 			</CardContent>
 		</Card>
 	);
@@ -946,6 +957,11 @@ function derivePreset(search: DashboardFilters): PresetValue {
 
 function isoDate(d: Date) {
 	return d.toISOString().slice(0, 10);
+}
+
+function stripDates(search: DashboardFilters): DashboardFilters {
+	const { from: _f, to: _t, ...rest } = search;
+	return rest;
 }
 
 function formString(form: FormData, key: string) {

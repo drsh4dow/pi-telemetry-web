@@ -9,6 +9,14 @@ import {
 	XAxis,
 	YAxis,
 } from "recharts";
+import {
+	Card,
+	CardContent,
+	CardDescription,
+	CardHeader,
+	CardTitle,
+} from "~/components/ui/card";
+import { Tabs } from "~/components/ui/tabs";
 import type { DashboardData } from "~/lib/dashboard";
 import {
 	formatCompact,
@@ -17,8 +25,6 @@ import {
 	formatCount,
 } from "~/lib/format";
 import { cn } from "~/lib/utils";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
-import { Segmented } from "./ui/segmented";
 
 const SERIES_COLORS = [
 	"var(--color-chart-1)",
@@ -26,7 +32,6 @@ const SERIES_COLORS = [
 	"var(--color-chart-3)",
 	"var(--color-chart-4)",
 	"var(--color-chart-5)",
-	"var(--color-chart-6)",
 ];
 
 type Metric = "tokens" | "turns" | "cost";
@@ -73,104 +78,103 @@ function TimelineCard({
 
 	return (
 		<Card className={className}>
-			<CardHeader>
-				<div>
-					<p className="mono text-[10.5px] text-faint uppercase tracking-[0.22em]">
-						Activity
-					</p>
-					<CardTitle className="mt-1">Usage over time</CardTitle>
+			<CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
+				<div className="space-y-1.5">
+					<CardTitle>Usage over time</CardTitle>
+					<CardDescription>
+						{metric === "tokens"
+							? "Tokens consumed by top models."
+							: metric === "turns"
+								? "Turns recorded across the window."
+								: "Spend across the window."}
+					</CardDescription>
 				</div>
-				<Segmented
-					value={metric}
-					options={METRICS}
-					onChange={setMetric}
-					ariaLabel="Timeline metric"
-				/>
+				<Tabs value={metric} options={METRICS} onChange={setMetric} />
 			</CardHeader>
-			<CardContent className="h-72 px-2 pb-3">
-				<ResponsiveContainer width="100%" height="100%">
-					<AreaChart
-						data={rows}
-						margin={{ left: 8, right: 12, top: 12, bottom: 4 }}
-					>
-						<defs>
-							{(isStacked ? models : ["value"]).map((key, i) => {
-								const color = SERIES_COLORS[i % SERIES_COLORS.length];
-								return (
-									<linearGradient
-										key={key}
-										id={`grad-${key}`}
-										x1="0"
-										y1="0"
-										x2="0"
-										y2="1"
-									>
-										<stop
-											offset="0%"
-											stopColor={color}
-											stopOpacity={isStacked ? 0.6 : 0.55}
-										/>
-										<stop offset="100%" stopColor={color} stopOpacity={0.02} />
-									</linearGradient>
-								);
-							})}
-						</defs>
-						<CartesianGrid
-							strokeDasharray="2 4"
-							stroke="var(--color-bg-grid)"
-							vertical={false}
-						/>
-						<XAxis
-							dataKey="date"
-							tickMargin={10}
-							tickLine={false}
-							axisLine={false}
-							minTickGap={24}
-							tickFormatter={shortDate}
-						/>
-						<YAxis
-							tickMargin={8}
-							tickLine={false}
-							axisLine={false}
-							width={48}
-							tickFormatter={(v) =>
-								metric === "cost" ? formatCostCompact(v) : formatCompact(v)
-							}
-						/>
-						<Tooltip
-							content={<TimelineTooltip metric={metric} />}
-							cursor={{
-								stroke: "var(--color-border-bright)",
-								strokeDasharray: "2 4",
-							}}
-						/>
-						{isStacked ? (
-							models.map((key, i) => (
-								<Area
-									key={key}
-									type="monotone"
-									dataKey={key}
-									stackId="t"
-									stroke={SERIES_COLORS[i % SERIES_COLORS.length]}
-									strokeWidth={1.4}
-									fill={`url(#grad-${key})`}
-									isAnimationActive
-									animationDuration={700}
-								/>
-							))
-						) : (
-							<Area
-								type="monotone"
-								dataKey="value"
-								stroke={SERIES_COLORS[0]}
-								strokeWidth={1.6}
-								fill="url(#grad-value)"
-								isAnimationActive
-								animationDuration={700}
+			<CardContent className="h-72 px-2 pb-4">
+				{rows.length === 0 ? (
+					<EmptyState message="No activity in the selected window." />
+				) : (
+					<ResponsiveContainer width="100%" height="100%">
+						<AreaChart
+							data={rows}
+							margin={{ left: 8, right: 16, top: 8, bottom: 0 }}
+						>
+							<defs>
+								{(isStacked ? models : ["value"]).map((key, i) => {
+									const color = SERIES_COLORS[i % SERIES_COLORS.length];
+									return (
+										<linearGradient
+											key={key}
+											id={`grad-${key}`}
+											x1="0"
+											y1="0"
+											x2="0"
+											y2="1"
+										>
+											<stop offset="0%" stopColor={color} stopOpacity={0.4} />
+											<stop offset="100%" stopColor={color} stopOpacity={0} />
+										</linearGradient>
+									);
+								})}
+							</defs>
+							<CartesianGrid
+								strokeDasharray="3 3"
+								stroke="var(--color-border)"
+								vertical={false}
 							/>
-						)}
-					</AreaChart>
-				</ResponsiveContainer>
+							<XAxis
+								dataKey="date"
+								tickMargin={10}
+								tickLine={false}
+								axisLine={false}
+								minTickGap={32}
+								tickFormatter={shortDate}
+							/>
+							<YAxis
+								tickMargin={8}
+								tickLine={false}
+								axisLine={false}
+								width={48}
+								tickFormatter={(v) =>
+									metric === "cost" ? formatCostCompact(v) : formatCompact(v)
+								}
+							/>
+							<Tooltip
+								content={<TimelineTooltip metric={metric} />}
+								cursor={{
+									stroke: "var(--color-border)",
+									strokeDasharray: "3 3",
+								}}
+							/>
+							{isStacked ? (
+								models.map((key, i) => (
+									<Area
+										key={key}
+										type="monotone"
+										dataKey={key}
+										stackId="t"
+										stroke={SERIES_COLORS[i % SERIES_COLORS.length]}
+										strokeWidth={1.6}
+										fill={`url(#grad-${key})`}
+										isAnimationActive
+										animationDuration={500}
+									/>
+								))
+							) : (
+								<Area
+									type="monotone"
+									dataKey="value"
+									stroke={SERIES_COLORS[0]}
+									strokeWidth={1.8}
+									fill="url(#grad-value)"
+									isAnimationActive
+									animationDuration={500}
+								/>
+							)}
+						</AreaChart>
+					</ResponsiveContainer>
+				)}
 			</CardContent>
 		</Card>
 	);
@@ -193,36 +197,38 @@ function TimelineTooltip({
 	metric: Metric;
 }) {
 	if (!active || !payload?.length) return null;
-	const total = payload.reduce((acc, p) => acc + (p.value ?? 0), 0);
 	const sorted = [...payload]
 		.filter((p) => p.value)
 		.sort((a, b) => b.value - a.value);
+	const total = sorted.reduce((acc, p) => acc + p.value, 0);
 	return (
-		<div className="glass-strong mono min-w-[180px] rounded-[var(--radius-md)] px-3 py-2 text-[11px]">
-			<p className="text-faint uppercase tracking-[0.18em]">
-				{shortDate(label ?? "")}
-			</p>
+		<div className="rounded-md border border-border bg-popover px-3 py-2 text-popover-foreground shadow-md">
+			<p className="font-medium text-xs">{shortDate(label ?? "")}</p>
 			<div className="mt-1.5 space-y-1">
 				{sorted.map((p) => (
 					<div
 						key={p.dataKey}
-						className="flex items-center justify-between gap-3"
+						className="flex items-center justify-between gap-4 text-xs"
 					>
-						<span className="flex items-center gap-1.5 text-dim">
+						<span className="flex items-center gap-2 text-muted-foreground">
 							<span
-								className="inline-block h-2 w-2 rounded-full"
+								className="inline-block h-2 w-2 rounded-[2px]"
 								style={{ background: p.color }}
 							/>
 							{p.dataKey === "value" ? metric : p.dataKey}
 						</span>
-						<span className="text-fg">{formatMetric(p.value, metric)}</span>
+						<span className="tabular text-foreground">
+							{formatMetric(p.value, metric)}
+						</span>
 					</div>
 				))}
 			</div>
 			{sorted.length > 1 ? (
-				<div className="mt-1.5 flex items-center justify-between border-t border-[var(--color-border)] pt-1.5 text-faint">
-					<span>Total</span>
-					<span className="text-fg">{formatMetric(total, metric)}</span>
+				<div className="mt-1.5 flex items-center justify-between border-border border-t pt-1.5 text-xs">
+					<span className="text-muted-foreground">Total</span>
+					<span className="tabular font-medium text-foreground">
+						{formatMetric(total, metric)}
+					</span>
 				</div>
 			) : null}
 		</div>
@@ -263,27 +269,24 @@ function HeatmapCard({
 	return (
 		<Card className={className}>
 			<CardHeader>
-				<div>
-					<p className="mono text-[10.5px] text-faint uppercase tracking-[0.22em]">
-						Cadence
-					</p>
-					<CardTitle className="mt-1">Day × hour</CardTitle>
-				</div>
-				<HeatmapLegend />
+				<CardTitle>Activity by hour</CardTitle>
+				<CardDescription>Tokens consumed by weekday and hour.</CardDescription>
 			</CardHeader>
-			<CardContent className="pb-5">
+			<CardContent>
 				<div className="-mx-1 overflow-x-auto px-1">
 					<div className="min-w-[300px]">
 						<div
 							className="grid gap-[3px]"
-							style={{ gridTemplateColumns: "auto repeat(24, minmax(0, 1fr))" }}
+							style={{
+								gridTemplateColumns: "auto repeat(24, minmax(0, 1fr))",
+							}}
 						>
 							<div />
 							{HOURS.map((h) => (
 								<div
 									key={`hour-${h}`}
 									className={cn(
-										"mono text-center text-[9px] text-faint",
+										"text-center text-[9px] text-muted-foreground tabular",
 										h % 3 !== 0 && "opacity-0",
 									)}
 								>
@@ -301,6 +304,19 @@ function HeatmapCard({
 							))}
 						</div>
 					</div>
+				</div>
+				<div className="mt-3 flex items-center justify-end gap-1.5 text-[10px] text-muted-foreground">
+					<span>Less</span>
+					{[0.08, 0.3, 0.55, 0.8, 1].map((s) => (
+						<span
+							key={s}
+							className="inline-block h-2.5 w-2.5 rounded-[2px]"
+							style={{
+								background: `color-mix(in oklch, var(--color-chart-1) ${Math.round(s * 88 + 8)}%, transparent)`,
+							}}
+						/>
+					))}
+					<span>More</span>
 				</div>
 			</CardContent>
 		</Card>
@@ -320,7 +336,7 @@ function HeatmapRow({
 }) {
 	return (
 		<>
-			<div className="mono pr-2 text-right text-[9.5px] text-faint">
+			<div className="pr-2 text-right text-[10px] text-muted-foreground">
 				{WEEKDAYS[day]}
 			</div>
 			{row.map((value, hour) => {
@@ -328,37 +344,18 @@ function HeatmapRow({
 				const intensity = empty ? 0 : Math.sqrt(value / max);
 				const bg =
 					value === 0
-						? "oklch(1 0 0 / 0.025)"
-						: `color-mix(in oklch, var(--color-accent) ${Math.round(intensity * 88 + 8)}%, transparent)`;
+						? "color-mix(in oklch, var(--color-muted) 60%, transparent)"
+						: `color-mix(in oklch, var(--color-chart-1) ${Math.round(intensity * 88 + 8)}%, transparent)`;
 				return (
 					<div
 						key={cellKey}
 						title={`${WEEKDAYS[day]} ${String(hour).padStart(2, "0")}:00 · ${formatCompact(value)} tokens`}
-						className="aspect-square rounded-[3px] transition hover:ring-1 hover:ring-[var(--color-border-bright)]"
+						className="aspect-square rounded-[3px] transition-shadow hover:ring-1 hover:ring-border"
 						style={{ background: bg }}
 					/>
 				);
 			})}
 		</>
-	);
-}
-
-function HeatmapLegend() {
-	const stops = [0.08, 0.3, 0.55, 0.8, 1];
-	return (
-		<div className="mono flex items-center gap-1.5 text-[9.5px] text-faint">
-			<span>less</span>
-			{stops.map((s) => (
-				<span
-					key={s}
-					className="inline-block h-2.5 w-2.5 rounded-[2px]"
-					style={{
-						background: `color-mix(in oklch, var(--color-accent) ${Math.round(s * 88 + 8)}%, transparent)`,
-					}}
-				/>
-			))}
-			<span>more</span>
-		</div>
 	);
 }
 
@@ -385,17 +382,12 @@ function TreemapCard({
 	return (
 		<Card className={className}>
 			<CardHeader>
-				<div>
-					<p className="mono text-[10.5px] text-faint uppercase tracking-[0.22em]">
-						Footprint
-					</p>
-					<CardTitle className="mt-1">Projects</CardTitle>
-					<p className="mt-1 text-[11px] text-muted">
-						Sized by tokens, shaded by cost intensity.
-					</p>
-				</div>
+				<CardTitle>Projects</CardTitle>
+				<CardDescription>
+					Tile size by tokens, color by cost intensity.
+				</CardDescription>
 			</CardHeader>
-			<CardContent className="h-72 pb-5">
+			<CardContent className="h-72">
 				{tree.length === 0 ? (
 					<EmptyState message="No project data in window." />
 				) : (
@@ -403,9 +395,9 @@ function TreemapCard({
 						<Treemap
 							data={tree}
 							dataKey="size"
-							stroke="var(--color-bg)"
+							stroke="var(--color-card)"
 							isAnimationActive
-							animationDuration={500}
+							animationDuration={400}
 							content={<TreemapTile />}
 						>
 							<Tooltip content={<TreemapTooltip />} />
@@ -438,9 +430,9 @@ function TreemapTile(props: TreemapTileProps) {
 		tokens = 0,
 	} = props;
 	if (width <= 0 || height <= 0) return null;
-	const fill = `color-mix(in oklch, var(--color-accent) ${Math.round(intensity * 80 + 12)}%, oklch(0.3 0.02 260))`;
-	const showLabel = width > 70 && height > 36;
-	const showValue = width > 90 && height > 56;
+	const fill = `color-mix(in oklch, var(--color-chart-1) ${Math.round(intensity * 60 + 18)}%, var(--color-card))`;
+	const showLabel = width > 70 && height > 32;
+	const showValue = width > 90 && height > 50;
 	return (
 		<g>
 			<rect
@@ -449,15 +441,15 @@ function TreemapTile(props: TreemapTileProps) {
 				width={width}
 				height={height}
 				fill={fill}
-				stroke="var(--color-bg)"
-				strokeWidth={1}
+				stroke="var(--color-card)"
+				strokeWidth={2}
 				rx={6}
 			/>
 			{showLabel ? (
 				<text
 					x={x + 10}
 					y={y + 18}
-					fill="var(--color-fg)"
+					fill="var(--color-foreground)"
 					fontFamily="var(--font-sans)"
 					fontWeight={500}
 					fontSize={12}
@@ -469,9 +461,10 @@ function TreemapTile(props: TreemapTileProps) {
 				<text
 					x={x + 10}
 					y={y + 34}
-					fill="var(--color-fg-muted)"
-					fontFamily="var(--font-mono)"
-					fontSize={10.5}
+					fill="var(--color-muted-foreground)"
+					fontFamily="var(--font-sans)"
+					fontSize={11}
+					style={{ fontVariantNumeric: "tabular-nums" }}
 				>
 					{formatCompact(tokens)}
 				</text>
@@ -493,22 +486,22 @@ function TreemapTooltip({
 	const p = payload[0]?.payload;
 	if (!p) return null;
 	return (
-		<div className="glass-strong mono min-w-[180px] rounded-[var(--radius-md)] px-3 py-2 text-[11px]">
-			<p className="text-fg text-[12px]">{p.name}</p>
-			<div className="mt-1 space-y-0.5 text-faint">
-				<Row label="Tokens" value={formatCompact(p.tokens)} />
-				<Row label="Cost" value={formatCost(p.cost)} />
-				<Row label="Turns" value={formatCount(p.turns)} />
+		<div className="rounded-md border border-border bg-popover px-3 py-2 text-popover-foreground shadow-md">
+			<p className="font-medium text-sm">{p.name}</p>
+			<div className="mt-1 space-y-0.5 text-xs">
+				<TooltipRow label="Tokens" value={formatCompact(p.tokens)} />
+				<TooltipRow label="Cost" value={formatCost(p.cost)} />
+				<TooltipRow label="Turns" value={formatCount(p.turns)} />
 			</div>
 		</div>
 	);
 }
 
-function Row({ label, value }: { label: string; value: string }) {
+function TooltipRow({ label, value }: { label: string; value: string }) {
 	return (
-		<div className="flex items-center justify-between gap-3">
-			<span>{label}</span>
-			<span className="text-fg">{value}</span>
+		<div className="flex items-center justify-between gap-4">
+			<span className="text-muted-foreground">{label}</span>
+			<span className="tabular text-foreground">{value}</span>
 		</div>
 	);
 }
@@ -526,13 +519,9 @@ function LeaderboardsCard({
 	data: DashboardData;
 	className?: string;
 }) {
-	const groups: Array<{
-		key: string;
-		title: string;
-		rows: typeof data.byModel;
-	}> = [
-		{ key: "models", title: "Models", rows: data.byModel },
-		{ key: "developers", title: "Developers", rows: data.byDeveloper },
+	const groups = [
+		{ key: "models" as const, title: "Models", rows: data.byModel },
+		{ key: "developers" as const, title: "Developers", rows: data.byDeveloper },
 	];
 	const [active, setActive] = useState<string>("models");
 	const current = groups.find((g) => g.key === active) ?? groups[0];
@@ -540,46 +529,47 @@ function LeaderboardsCard({
 
 	return (
 		<Card className={className}>
-			<CardHeader>
-				<div>
-					<p className="mono text-[10.5px] text-faint uppercase tracking-[0.22em]">
-						Leaderboard
-					</p>
-					<CardTitle className="mt-1">Top by tokens</CardTitle>
+			<CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
+				<div className="space-y-1.5">
+					<CardTitle>Top consumers</CardTitle>
+					<CardDescription>Ranked by total tokens.</CardDescription>
 				</div>
-				<Segmented
+				<Tabs
 					value={active}
 					options={groups.map((g) => ({ value: g.key, label: g.title }))}
 					onChange={setActive}
 				/>
 			</CardHeader>
-			<CardContent className="pb-5">
+			<CardContent>
 				{current.rows.length === 0 ? (
 					<EmptyState message="No data in window." />
 				) : (
-					<ol className="space-y-1.5">
+					<ol className="space-y-2">
 						{current.rows.map((row, i) => {
 							const pct = max > 0 ? (row.tokens / max) * 100 : 0;
 							return (
 								<li
 									key={`${current.key}-${row.name}`}
-									className="group relative grid grid-cols-[20px_1fr_auto] items-center gap-3 overflow-hidden rounded-[8px] px-2 py-1.5"
+									className="group relative grid grid-cols-[1.5rem_1fr_auto] items-center gap-3 rounded-md px-2 py-1.5"
 								>
 									<span
-										className="absolute inset-y-0 left-0 -z-0 rounded-[8px] bg-[var(--color-accent-soft)] opacity-50 transition group-hover:opacity-80"
-										style={{ width: `${pct}%` }}
+										className="-z-0 pointer-events-none absolute inset-y-0 left-0 rounded-md bg-chart-1/10 transition-colors group-hover:bg-chart-1/15"
+										style={{
+											width: `${pct}%`,
+											background: `color-mix(in oklch, var(--color-chart-1) 14%, transparent)`,
+										}}
 									/>
-									<span className="mono z-1 text-[10.5px] text-faint">
+									<span className="z-1 text-muted-foreground text-xs tabular">
 										{String(i + 1).padStart(2, "0")}
 									</span>
-									<span className="z-1 truncate text-sm text-fg">
+									<span className="z-1 truncate text-foreground text-sm">
 										{row.name}
 									</span>
-									<span className="z-1 flex items-baseline gap-2">
-										<span className="mono text-fg text-sm">
+									<span className="z-1 flex items-baseline gap-3 text-sm">
+										<span className="tabular text-foreground">
 											{formatCompact(row.tokens)}
 										</span>
-										<span className="mono text-[10px] text-faint">
+										<span className="tabular text-muted-foreground text-xs">
 											{formatCostCompact(row.cost)}
 										</span>
 									</span>
@@ -596,9 +586,7 @@ function LeaderboardsCard({
 function EmptyState({ message }: { message: string }) {
 	return (
 		<div className="flex h-full min-h-32 items-center justify-center text-center">
-			<p className="mono text-[11px] text-faint uppercase tracking-[0.18em]">
-				{message}
-			</p>
+			<p className="text-muted-foreground text-sm">{message}</p>
 		</div>
 	);
 }

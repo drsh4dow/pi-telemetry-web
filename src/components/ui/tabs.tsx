@@ -1,6 +1,11 @@
 import { cn } from "~/lib/utils";
 
-export function Segmented<T extends string>({
+/**
+ * Minimal shadcn-style tabs (segmented control). Uncontrolled API mirrors
+ * shadcn's, but built on a plain button group to avoid pulling in another
+ * Radix dependency.
+ */
+export function Tabs<T extends string>({
 	value,
 	options,
 	onChange,
@@ -18,7 +23,7 @@ export function Segmented<T extends string>({
 			role="tablist"
 			aria-label={ariaLabel}
 			className={cn(
-				"inline-flex items-center gap-1 rounded-[var(--radius-md)] border border-[var(--color-border-strong)] bg-[oklch(1_0_0_/_0.025)] p-1 backdrop-blur",
+				"inline-flex h-9 items-center justify-center rounded-lg bg-muted p-1 text-muted-foreground",
 				className,
 			)}
 		>
@@ -32,10 +37,10 @@ export function Segmented<T extends string>({
 						aria-selected={active}
 						onClick={() => onChange(opt.value)}
 						className={cn(
-							"mono rounded-[6px] px-2.5 py-1 text-[11px] uppercase tracking-[0.16em] transition",
+							"inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1 font-medium text-xs transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
 							active
-								? "bg-[oklch(1_0_0_/_0.10)] text-fg shadow-[inset_0_0_0_1px_oklch(1_0_0_/_0.10)]"
-								: "text-faint hover:text-dim",
+								? "bg-background text-foreground shadow-sm"
+								: "hover:text-foreground",
 						)}
 					>
 						{opt.label}

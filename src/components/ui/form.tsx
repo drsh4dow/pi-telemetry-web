@@ -7,17 +7,17 @@ import type {
 import { cn } from "~/lib/utils";
 
 const fieldBase =
-	"h-9 w-full rounded-[var(--radius-md)] border border-[var(--color-border-strong)] bg-[oklch(1_0_0_/_0.025)] px-3 text-sm text-fg outline-none transition placeholder:text-faint hover:border-[var(--color-border-bright)] focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent-soft)]";
+	"flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50";
 
 export function Label({
 	className,
 	...props
 }: LabelHTMLAttributes<HTMLLabelElement>) {
 	return (
-		// biome-ignore lint/a11y/noLabelWithoutControl: reusable label — callers attach htmlFor or wrap an input.
+		// biome-ignore lint/a11y/noLabelWithoutControl: callers attach htmlFor or wrap an input.
 		<label
 			className={cn(
-				"mono text-[10.5px] text-faint uppercase tracking-[0.18em]",
+				"font-medium text-sm leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70",
 				className,
 			)}
 			{...props}
@@ -41,12 +41,12 @@ export function Select({
 		<select
 			className={cn(
 				fieldBase,
-				"appearance-none bg-[length:16px_16px] bg-[right_0.5rem_center] bg-no-repeat pr-8",
+				"appearance-none bg-[length:14px_14px] bg-[right_0.6rem_center] bg-no-repeat pr-9",
 				className,
 			)}
 			style={{
 				backgroundImage:
-					"url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%239aa3ad' stroke-width='1.6'><path d='M6 8l4 4 4-4'/></svg>\")",
+					"url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%23a1a1aa' stroke-width='1.6'><path d='M6 8l4 4 4-4'/></svg>\")",
 			}}
 			{...props}
 		>

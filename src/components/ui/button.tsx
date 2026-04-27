@@ -2,17 +2,29 @@ import type { ButtonHTMLAttributes } from "react";
 import { cn } from "~/lib/utils";
 
 const base =
-	"inline-flex items-center justify-center gap-2 rounded-[var(--radius-md)] px-3.5 h-9 font-medium text-sm transition-[background,color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 select-none";
+	"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md font-medium text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0";
+
+const sizes = {
+	default: "h-9 px-4 py-2",
+	sm: "h-8 rounded-md px-3 text-xs",
+	icon: "h-9 w-9",
+} as const;
+
+interface VariantProps {
+	size?: keyof typeof sizes;
+}
 
 export function Button({
 	className,
+	size = "default",
 	...props
-}: ButtonHTMLAttributes<HTMLButtonElement>) {
+}: ButtonHTMLAttributes<HTMLButtonElement> & VariantProps) {
 	return (
 		<button
 			className={cn(
 				base,
-				"bg-[var(--color-accent)] text-[var(--color-primary-foreground)] shadow-[0_0_0_1px_oklch(1_0_0_/_0.04)_inset,0_8px_24px_-12px_var(--color-accent)] hover:brightness-110",
+				sizes[size],
+				"bg-primary text-primary-foreground shadow hover:bg-primary/90",
 				className,
 			)}
 			{...props}
@@ -22,13 +34,15 @@ export function Button({
 
 export function SecondaryButton({
 	className,
+	size = "default",
 	...props
-}: ButtonHTMLAttributes<HTMLButtonElement>) {
+}: ButtonHTMLAttributes<HTMLButtonElement> & VariantProps) {
 	return (
 		<button
 			className={cn(
 				base,
-				"border border-[var(--color-border-strong)] bg-[oklch(1_0_0_/_0.03)] text-fg backdrop-blur hover:bg-[oklch(1_0_0_/_0.06)] hover:border-[var(--color-border-bright)]",
+				sizes[size],
+				"border border-border bg-transparent text-foreground hover:bg-accent hover:text-accent-foreground",
 				className,
 			)}
 			{...props}
@@ -38,13 +52,15 @@ export function SecondaryButton({
 
 export function GhostButton({
 	className,
+	size = "default",
 	...props
-}: ButtonHTMLAttributes<HTMLButtonElement>) {
+}: ButtonHTMLAttributes<HTMLButtonElement> & VariantProps) {
 	return (
 		<button
 			className={cn(
 				base,
-				"text-dim hover:bg-[oklch(1_0_0_/_0.04)] hover:text-fg",
+				sizes[size],
+				"text-muted-foreground hover:bg-accent hover:text-accent-foreground",
 				className,
 			)}
 			{...props}
@@ -54,13 +70,15 @@ export function GhostButton({
 
 export function DangerButton({
 	className,
+	size = "default",
 	...props
-}: ButtonHTMLAttributes<HTMLButtonElement>) {
+}: ButtonHTMLAttributes<HTMLButtonElement> & VariantProps) {
 	return (
 		<button
 			className={cn(
 				base,
-				"bg-[var(--color-destructive)] text-white shadow-[0_8px_24px_-12px_var(--color-destructive)] hover:brightness-110",
+				sizes[size],
+				"bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90",
 				className,
 			)}
 			{...props}
