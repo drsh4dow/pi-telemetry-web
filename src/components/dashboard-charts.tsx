@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { type ReactNode, useId, useState } from "react";
 import {
 	Area,
 	AreaChart,
@@ -44,6 +44,20 @@ const METRICS: Array<{ value: Metric; label: string }> = [
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const HOURS = Array.from({ length: 24 }, (_, h) => h);
+const CHART_INITIAL_DIMENSION = { width: 320, height: 288 };
+
+function ChartViewport({ children }: { children: ReactNode }) {
+	return (
+		<ResponsiveContainer
+			width="100%"
+			height="100%"
+			minWidth={0}
+			initialDimension={CHART_INITIAL_DIMENSION}
+		>
+			{children}
+		</ResponsiveContainer>
+	);
+}
 
 export function DashboardCharts({ data }: { data: DashboardData }) {
 	return (
@@ -66,6 +80,7 @@ function TimelineCard({
 	className?: string;
 }) {
 	const [metric, setMetric] = useState<Metric>("tokens");
+	const gradientPrefix = useId().replace(/[^a-zA-Z0-9_-]/g, "");
 	const models = data.modelSeries.models;
 	const rows =
 		metric === "tokens"
@@ -75,6 +90,9 @@ function TimelineCard({
 				}))
 			: data.series.map((row) => ({ date: row.date, value: row[metric] }));
 	const isStacked = metric === "tokens";
+	const seriesKeys = isStacked ? models : ["value"];
+	const gradientId = (key: string) =>
+		`${gradientPrefix}-${seriesKeys.indexOf(key)}`;
 
 	return (
 		<Card className={className}>
@@ -91,22 +109,22 @@ function TimelineCard({
 				</div>
 				<Tabs value={metric} options={METRICS} onChange={setMetric} />
 			</CardHeader>
-			<CardContent className="h-72 px-2 pb-4">
+			<CardContent className="h-72 min-w-0 px-2 pb-4">
 				{rows.length === 0 ? (
 					<EmptyState message="No activity in the selected window." />
 				) : (
-					<ResponsiveContainer width="100%" height="100%">
+					<ChartViewport>
 						<AreaChart
 							data={rows}
 							margin={{ left: 8, right: 16, top: 8, bottom: 0 }}
 						>
 							<defs>
-								{(isStacked ? models : ["value"]).map((key, i) => {
+								{seriesKeys.map((key, i) => {
 									const color = SERIES_COLORS[i % SERIES_COLORS.length];
 									return (
 										<linearGradient
 											key={key}
-											id={`grad-${key}`}
+											id={gradientId(key)}
 											x1="0"
 											y1="0"
 											x2="0"
@@ -156,7 +174,7 @@ function TimelineCard({
 										stackId="t"
 										stroke={SERIES_COLORS[i % SERIES_COLORS.length]}
 										strokeWidth={1.6}
-										fill={`url(#grad-${key})`}
+										fill={`url(#${gradientId(key)})`}
 										isAnimationActive
 										animationDuration={500}
 									/>
@@ -167,13 +185,13 @@ function TimelineCard({
 									dataKey="value"
 									stroke={SERIES_COLORS[0]}
 									strokeWidth={1.8}
-									fill="url(#grad-value)"
+									fill={`url(#${gradientId("value")})`}
 									isAnimationActive
 									animationDuration={500}
 								/>
 							)}
 						</AreaChart>
-					</ResponsiveContainer>
+					</ChartViewport>
 				)}
 			</CardContent>
 		</Card>
@@ -387,11 +405,11 @@ function TreemapCard({
 					Tile size by tokens, color by cost intensity.
 				</CardDescription>
 			</CardHeader>
-			<CardContent className="h-72">
+			<CardContent className="h-72 min-w-0">
 				{tree.length === 0 ? (
 					<EmptyState message="No project data in window." />
 				) : (
-					<ResponsiveContainer width="100%" height="100%">
+					<ChartViewport>
 						<Treemap
 							data={tree}
 							dataKey="size"
@@ -402,7 +420,7 @@ function TreemapCard({
 						>
 							<Tooltip content={<TreemapTooltip />} />
 						</Treemap>
-					</ResponsiveContainer>
+					</ChartViewport>
 				)}
 			</CardContent>
 		</Card>
@@ -429,10 +447,11 @@ function TreemapTile(props: TreemapTileProps) {
 		intensity = 0,
 		tokens = 0,
 	} = props;
-	if (width <= 0 || height <= 0) return null;
-	const fill = `color-mix(in oklch, var(--color-chart-1) ${Math.round(intensity * 60 + 18)}%, var(--color-card))`;
+	if (!name || width <= 0 || height <= 0) return null;
+	const fill = `color-mix(in oklch, var(--color-chart-1) ${Math.round(intensity * 56 + 22)}%, var(--color-secondary))`;
 	const showLabel = width > 70 && height > 32;
 	const showValue = width > 90 && height > 50;
+	const labelWidth = Math.max(0, width - 12);
 	return (
 		<g>
 			<rect
@@ -446,22 +465,32 @@ function TreemapTile(props: TreemapTileProps) {
 				rx={6}
 			/>
 			{showLabel ? (
-				<text
-					x={x + 10}
-					y={y + 18}
-					fill="var(--color-foreground)"
-					fontFamily="var(--font-sans)"
-					fontWeight={500}
-					fontSize={12}
-				>
-					{truncate(name, Math.max(6, Math.floor(width / 8)))}
-				</text>
+				<>
+					<rect
+						x={x + 6}
+						y={y + 7}
+						width={labelWidth}
+						height={showValue ? 34 : 20}
+						fill="rgba(0, 0, 0, 0.28)"
+						rx={5}
+					/>
+					<text
+						x={x + 12}
+						y={y + 21}
+						fill="rgba(255, 255, 255, 0.96)"
+						fontFamily="var(--font-sans)"
+						fontWeight={650}
+						fontSize={12}
+					>
+						{truncate(name, Math.max(6, Math.floor(width / 8)))}
+					</text>
+				</>
 			) : null}
 			{showValue ? (
 				<text
-					x={x + 10}
-					y={y + 34}
-					fill="var(--color-muted-foreground)"
+					x={x + 12}
+					y={y + 36}
+					fill="rgba(255, 255, 255, 0.72)"
 					fontFamily="var(--font-sans)"
 					fontSize={11}
 					style={{ fontVariantNumeric: "tabular-nums" }}
