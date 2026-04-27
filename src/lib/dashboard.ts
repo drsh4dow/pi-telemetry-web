@@ -39,15 +39,35 @@ export interface DashboardEvent {
 	rawJson: string;
 }
 
+export interface DashboardSummary {
+	turns: number;
+	tokens: number;
+	cost: number;
+	developers: number;
+	projects: number;
+}
+
 export interface DashboardData {
-	summary: {
-		turns: number;
-		tokens: number;
-		cost: number;
-		developers: number;
-		projects: number;
+	summary: DashboardSummary;
+	previous: DashboardSummary;
+	window: {
+		fromMs: number | null;
+		toMs: number | null;
+		days: number;
+		bucket: "hour" | "day";
 	};
 	series: Array<{ date: string; turns: number; tokens: number; cost: number }>;
+	modelSeries: {
+		dates: string[];
+		models: string[];
+		/** rows aligned with dates; values are tokens per model on that date. */
+		values: Array<Record<string, number>>;
+	};
+	heatmap: {
+		/** 7 weekdays (0=Sun) × 24 hours, value = total tokens. */
+		cells: number[][];
+		max: number;
+	};
 	byProject: Array<{
 		name: string;
 		turns: number;
@@ -71,6 +91,8 @@ export interface DashboardData {
 	events: DashboardEvent[];
 }
 
+const DAY_MS = 86_400_000;
+
 function timestampMs(
 	value: string | undefined,
 	endOfDay = false,
@@ -81,18 +103,27 @@ function timestampMs(
 	return Number.isFinite(parsed) ? parsed : undefined;
 }
 
-function whereClause(filters: DashboardFilters) {
+function whereClause(
+	filters: DashboardFilters,
+	override?: { fromMs?: number; toMs?: number },
+) {
 	const clauses: string[] = [];
 	const params: Array<string | number> = [];
-	const from = timestampMs(filters.from);
-	const to = timestampMs(filters.to, true);
-	if (from !== undefined) {
+	const fromMs =
+		override?.fromMs !== undefined
+			? override.fromMs
+			: timestampMs(filters.from);
+	const toMs =
+		override?.toMs !== undefined
+			? override.toMs
+			: timestampMs(filters.to, true);
+	if (fromMs !== undefined) {
 		clauses.push("event_timestamp_ms >= ?");
-		params.push(from);
+		params.push(fromMs);
 	}
-	if (to !== undefined) {
+	if (toMs !== undefined) {
 		clauses.push("event_timestamp_ms <= ?");
-		params.push(to);
+		params.push(toMs);
 	}
 	for (const [column, value] of [
 		["team", filters.team],
@@ -108,6 +139,8 @@ function whereClause(filters: DashboardFilters) {
 	return {
 		sql: clauses.length ? `WHERE ${clauses.join(" AND ")}` : "",
 		params,
+		fromMs,
+		toMs,
 	};
 }
 
@@ -121,12 +154,13 @@ function stringList(client: Database, column: string): string[] {
 	).map((row) => row.value);
 }
 
-export function getDashboardData(
+function summaryFor(
 	client: Database,
 	filters: DashboardFilters,
-): DashboardData {
-	const where = whereClause(filters);
-	const summary = client
+	override?: { fromMs?: number; toMs?: number },
+): DashboardSummary {
+	const where = whereClause(filters, override);
+	const row = client
 		.query(
 			`SELECT
 				COUNT(*) AS turns,
@@ -136,12 +170,45 @@ export function getDashboardData(
 				COUNT(DISTINCT project) AS projects
 			FROM telemetry_event ${where.sql}`,
 		)
-		.get(...where.params) as DashboardData["summary"] | null;
+		.get(...where.params) as DashboardSummary | null;
+	return row ?? { cost: 0, developers: 0, projects: 0, tokens: 0, turns: 0 };
+}
+
+export function getDashboardData(
+	client: Database,
+	filters: DashboardFilters,
+): DashboardData {
+	const where = whereClause(filters);
+
+	// Resolve effective window for prev-period comparison.
+	const nowMs = Date.now();
+	const span = client
+		.query(
+			`SELECT MIN(event_timestamp_ms) AS minMs, MAX(event_timestamp_ms) AS maxMs FROM telemetry_event ${where.sql}`,
+		)
+		.get(...where.params) as { minMs: number | null; maxMs: number | null };
+	const effectiveFrom = where.fromMs ?? span.minMs ?? nowMs;
+	const effectiveTo = where.toMs ?? span.maxMs ?? nowMs;
+	const windowSpan = Math.max(effectiveTo - effectiveFrom, DAY_MS);
+	const days = Math.max(1, Math.round(windowSpan / DAY_MS));
+
+	const summary = summaryFor(client, filters);
+	const previous = summaryFor(client, filters, {
+		fromMs: effectiveFrom - windowSpan,
+		toMs: effectiveFrom - 1,
+	});
+
+	// Bucket by hour when the window is short (≤2 days), otherwise by day.
+	const bucket: "hour" | "day" = windowSpan <= 2 * DAY_MS ? "hour" : "day";
+	const bucketExpr =
+		bucket === "hour"
+			? "strftime('%Y-%m-%d %H:00', event_timestamp_ms / 1000, 'unixepoch')"
+			: "date(event_timestamp_ms / 1000, 'unixepoch')";
 
 	const series = client
 		.query(
 			`SELECT
-				date(event_timestamp_ms / 1000, 'unixepoch') AS date,
+				${bucketExpr} AS date,
 				COUNT(*) AS turns,
 				COALESCE(SUM(total_tokens), 0) AS tokens,
 				COALESCE(SUM(cost_total), 0) AS cost
@@ -170,6 +237,81 @@ export function getDashboardData(
 			tokens: number;
 			cost: number;
 		}>;
+
+	// Stacked area: top 5 models by tokens, with "Others" bucket per day.
+	const topModels = (
+		client
+			.query(
+				`SELECT model AS name, COALESCE(SUM(total_tokens), 0) AS tokens
+				 FROM telemetry_event ${where.sql}
+				 GROUP BY model
+				 ORDER BY tokens DESC
+				 LIMIT 5`,
+			)
+			.all(...where.params) as Array<{ name: string; tokens: number }>
+	).map((row) => row.name);
+
+	const perDayModel = client
+		.query(
+			`SELECT
+				${bucketExpr} AS date,
+				model,
+				COALESCE(SUM(total_tokens), 0) AS tokens
+			FROM telemetry_event ${where.sql}
+			GROUP BY date, model
+			ORDER BY date`,
+		)
+		.all(...where.params) as Array<{
+		date: string;
+		model: string;
+		tokens: number;
+	}>;
+
+	const dates = series.map((s) => s.date);
+	const modelSet = new Set(topModels);
+	const modelLabels = [...topModels];
+	const hasOthers = perDayModel.some((row) => !modelSet.has(row.model));
+	if (hasOthers) modelLabels.push("Others");
+	const valuesByDate = new Map<string, Record<string, number>>();
+	for (const date of dates) {
+		const entry: Record<string, number> = {};
+		for (const m of modelLabels) entry[m] = 0;
+		valuesByDate.set(date, entry);
+	}
+	for (const row of perDayModel) {
+		const entry = valuesByDate.get(row.date);
+		if (!entry) continue;
+		const key = modelSet.has(row.model) ? row.model : "Others";
+		entry[key] = (entry[key] ?? 0) + row.tokens;
+	}
+	const modelValues = dates.map((d) => valuesByDate.get(d) ?? {});
+
+	// Heatmap: weekday (0=Sun) × hour, total tokens.
+	const cells: number[][] = Array.from({ length: 7 }, () =>
+		Array.from({ length: 24 }, () => 0),
+	);
+	const heatRows = client
+		.query(
+			`SELECT
+				CAST(strftime('%w', event_timestamp_ms / 1000, 'unixepoch') AS INTEGER) AS dow,
+				CAST(strftime('%H', event_timestamp_ms / 1000, 'unixepoch') AS INTEGER) AS hour,
+				COALESCE(SUM(total_tokens), 0) AS tokens
+			FROM telemetry_event ${where.sql}
+			GROUP BY dow, hour`,
+		)
+		.all(...where.params) as Array<{
+		dow: number;
+		hour: number;
+		tokens: number;
+	}>;
+	let heatMax = 0;
+	for (const row of heatRows) {
+		if (row.dow < 0 || row.dow > 6 || row.hour < 0 || row.hour > 23) continue;
+		const dowRow = cells[row.dow];
+		if (!dowRow) continue;
+		dowRow[row.hour] = row.tokens;
+		if (row.tokens > heatMax) heatMax = row.tokens;
+	}
 
 	const events = client
 		.query(
@@ -207,14 +349,17 @@ export function getDashboardData(
 		.all(...where.params) as DashboardEvent[];
 
 	return {
-		summary: summary ?? {
-			cost: 0,
-			developers: 0,
-			projects: 0,
-			tokens: 0,
-			turns: 0,
+		summary,
+		previous,
+		window: {
+			fromMs: where.fromMs ?? null,
+			toMs: where.toMs ?? null,
+			days,
+			bucket,
 		},
 		series,
+		modelSeries: { dates, models: modelLabels, values: modelValues },
+		heatmap: { cells, max: heatMax },
 		byProject: group("project"),
 		byDeveloper: group("developer"),
 		byModel: group("model"),

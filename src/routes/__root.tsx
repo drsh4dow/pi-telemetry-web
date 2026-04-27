@@ -14,7 +14,19 @@ export const Route = createRootRoute({
 				content: "Self-hosted telemetry dashboard for pi-telemetry-minimal.",
 			},
 		],
-		links: [{ rel: "stylesheet", href: appCss }],
+		links: [
+			{ rel: "preconnect", href: "https://fonts.googleapis.com" },
+			{
+				rel: "preconnect",
+				href: "https://fonts.gstatic.com",
+				crossOrigin: "anonymous",
+			},
+			{
+				rel: "stylesheet",
+				href: "https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Fraunces:opsz,wght@9..144,300..700&display=swap",
+			},
+			{ rel: "stylesheet", href: appCss },
+		],
 	}),
 	shellComponent: RootDocument,
 });

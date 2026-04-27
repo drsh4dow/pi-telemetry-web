@@ -1,6 +1,9 @@
 import type { ButtonHTMLAttributes } from "react";
 import { cn } from "~/lib/utils";
 
+const base =
+	"inline-flex items-center justify-center gap-2 rounded-[var(--radius-md)] px-3.5 h-9 font-medium text-sm transition-[background,color,border-color,opacity,transform] duration-150 ease-out active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 select-none";
+
 export function Button({
 	className,
 	...props
@@ -8,7 +11,8 @@ export function Button({
 	return (
 		<button
 			className={cn(
-				"inline-flex items-center justify-center rounded-md bg-primary px-3 py-2 font-medium text-primary-foreground text-sm shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50",
+				base,
+				"bg-[var(--color-accent)] text-[var(--color-primary-foreground)] shadow-[0_0_0_1px_oklch(1_0_0_/_0.04)_inset,0_8px_24px_-12px_var(--color-accent)] hover:brightness-110",
 				className,
 			)}
 			{...props}
@@ -23,7 +27,24 @@ export function SecondaryButton({
 	return (
 		<button
 			className={cn(
-				"inline-flex items-center justify-center rounded-md border bg-white px-3 py-2 font-medium text-foreground text-sm shadow-sm transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50",
+				base,
+				"border border-[var(--color-border-strong)] bg-[oklch(1_0_0_/_0.03)] text-fg backdrop-blur hover:bg-[oklch(1_0_0_/_0.06)] hover:border-[var(--color-border-bright)]",
+				className,
+			)}
+			{...props}
+		/>
+	);
+}
+
+export function GhostButton({
+	className,
+	...props
+}: ButtonHTMLAttributes<HTMLButtonElement>) {
+	return (
+		<button
+			className={cn(
+				base,
+				"text-dim hover:bg-[oklch(1_0_0_/_0.04)] hover:text-fg",
 				className,
 			)}
 			{...props}
@@ -38,7 +59,8 @@ export function DangerButton({
 	return (
 		<button
 			className={cn(
-				"inline-flex items-center justify-center rounded-md bg-destructive px-3 py-2 font-medium text-primary-foreground text-sm shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50",
+				base,
+				"bg-[var(--color-destructive)] text-white shadow-[0_8px_24px_-12px_var(--color-destructive)] hover:brightness-110",
 				className,
 			)}
 			{...props}

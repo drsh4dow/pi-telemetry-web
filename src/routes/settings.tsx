@@ -54,23 +54,33 @@ function SettingsPage() {
 }`;
 
 	return (
-		<div className="min-h-screen bg-muted/60">
-			<header className="border-b bg-white">
-				<div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
-					<div>
-						<h1 className="font-semibold text-xl">Settings</h1>
-						<p className="text-muted-foreground text-sm">
-							Ingestion and maintenance.
-						</p>
-					</div>
-					<nav className="flex items-center gap-3 text-sm">
+		<div className="min-h-screen">
+			<header className="sticky top-0 z-30 border-b border-[var(--color-border)] bg-[oklch(0.16_0.012_260_/_0.7)] backdrop-blur-xl">
+				<div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-6 py-3">
+					<Link to="/dashboard" className="flex items-center gap-2.5">
+						<span className="grid h-8 w-8 place-items-center rounded-[10px] border border-[var(--color-border-strong)] bg-[oklch(1_0_0_/_0.04)]">
+							<span className="display text-[18px] text-fg leading-none">
+								π
+							</span>
+						</span>
+						<span className="hidden flex-col leading-tight sm:flex">
+							<span className="display text-[15px] text-fg">Pi Telemetry</span>
+							<span className="mono text-[9.5px] text-faint uppercase tracking-[0.2em]">
+								Settings
+							</span>
+						</span>
+					</Link>
+					<nav className="flex items-center gap-1">
 						<Link
 							to="/dashboard"
-							className="text-muted-foreground hover:text-foreground"
+							className="mono rounded-md px-3 py-1.5 text-[11px] uppercase tracking-[0.18em] text-faint hover:text-dim"
 						>
 							Dashboard
 						</Link>
-						<Link to="/settings" className="font-medium text-primary">
+						<Link
+							to="/settings"
+							className="mono rounded-md bg-[oklch(1_0_0_/_0.06)] px-3 py-1.5 text-[11px] uppercase tracking-[0.18em] text-fg"
+						>
 							Settings
 						</Link>
 					</nav>
@@ -87,13 +97,13 @@ function SettingsPage() {
 					<CardContent className="space-y-4">
 						<div>
 							<p className="font-medium text-sm">Ingest URL</p>
-							<code className="mt-2 block overflow-x-auto rounded-md bg-muted p-3 text-sm">
+							<code className="mono mt-2 block overflow-x-auto rounded-md border border-[var(--color-border)] bg-[oklch(0_0_0_/_0.3)] p-3 text-fg text-sm">
 								{ingestUrl}
 							</code>
 						</div>
 						<div>
 							<p className="font-medium text-sm">Bearer token</p>
-							<code className="mt-2 block break-all rounded-md bg-muted p-3 text-sm">
+							<code className="mono mt-2 block break-all rounded-md border border-[var(--color-border)] bg-[oklch(0_0_0_/_0.3)] p-3 text-fg text-sm">
 								{settings.ingestToken}
 							</code>
 							{settings.envTokenOverride ? (
@@ -106,7 +116,7 @@ function SettingsPage() {
 							<p className="font-medium text-sm">
 								~/.pi/telemetry-minimal.json
 							</p>
-							<pre className="mt-2 overflow-x-auto rounded-md bg-muted p-3 text-sm">
+							<pre className="mono mt-2 overflow-x-auto rounded-md border border-[var(--color-border)] bg-[oklch(0_0_0_/_0.3)] p-3 text-fg text-sm leading-relaxed">
 								{config}
 							</pre>
 						</div>
