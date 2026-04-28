@@ -14,6 +14,7 @@ export interface DashboardEvent {
 	id: number;
 	timestamp: string;
 	turnIndex: number;
+	stopReason: string | null;
 	sessionId: string;
 	sessionFile: string | null;
 	cwd: string;
@@ -324,6 +325,7 @@ export async function getDashboardData(
 			id,
 			datetime(event_timestamp_ms / 1000, 'unixepoch') AS timestamp,
 			turn_index AS turnIndex,
+			stop_reason AS stopReason,
 			session_id AS sessionId,
 			session_file AS sessionFile,
 			cwd,

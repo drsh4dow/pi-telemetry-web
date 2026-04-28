@@ -725,6 +725,7 @@ function EventDrawer({
 							value={formatCompact(event.totalTokens)}
 						/>
 						<DetailStat label="Cost" value={formatCost(event.costTotal ?? 0)} />
+						<DetailStat label="Stop" value={event.stopReason ?? "—"} />
 						<DetailStat
 							label="Input"
 							value={formatCompact(event.inputTokens)}

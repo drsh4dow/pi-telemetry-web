@@ -12,6 +12,13 @@ const optionalCleanString = z
 
 const tokenCountSchema = z.number().int().nonnegative();
 const costPartSchema = z.number().finite().nonnegative();
+const stopReasonSchema = z.enum([
+	"stop",
+	"length",
+	"toolUse",
+	"error",
+	"aborted",
+]);
 
 const costSchema = z
 	.object({
@@ -42,17 +49,6 @@ const usageSchema = z
 		totalTokens: tokenCountSchema.optional(),
 		cost: costSchema,
 	})
-	.superRefine((usage, ctx) => {
-		const total =
-			usage.input + usage.output + usage.cacheRead + usage.cacheWrite;
-		if (usage.totalTokens !== undefined && usage.totalTokens !== total) {
-			ctx.addIssue({
-				code: "custom",
-				message: "totalTokens must equal token component sum",
-				path: ["totalTokens"],
-			});
-		}
-	})
 	.transform((usage) => ({
 		...usage,
 		totalTokens:
@@ -65,7 +61,10 @@ export const turnUsageRecordSchema = z
 		schemaVersion: z.literal(1),
 		type: z.literal("turn_usage"),
 		timestamp: z.iso.datetime(),
-		turn: z.object({ index: z.number().int().nonnegative() }),
+		turn: z.object({
+			index: z.number().int().nonnegative(),
+			stopReason: stopReasonSchema.optional(),
+		}),
 		session: z.object({
 			id: z.string().min(1),
 			file: optionalCleanString,
@@ -188,12 +187,12 @@ export async function ingestTurnUsage(
 		client,
 		`INSERT OR IGNORE INTO telemetry_event (
 			hash, created_at_ms, event_timestamp_ms, schema_version, type, turn_index,
-			session_id, session_file, cwd, cwd_name, api, provider, model,
+			stop_reason, session_id, session_file, cwd, cwd_name, api, provider, model,
 			team, project, developer, git_root, git_remote, git_branch, git_commit,
 			git_user_name, git_user_email, input_tokens, output_tokens, cache_read_tokens,
 			cache_write_tokens, total_tokens, cost_input, cost_output, cost_cache_read,
 			cost_cache_write, cost_total, raw_json
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		[
 			hash,
 			Date.now(),
@@ -201,6 +200,7 @@ export async function ingestTurnUsage(
 			record.schemaVersion,
 			record.type,
 			record.turn.index,
+			record.turn.stopReason ?? null,
 			record.session.id,
 			record.session.file ?? null,
 			record.session.cwd,

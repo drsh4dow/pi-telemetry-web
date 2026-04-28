@@ -45,7 +45,7 @@ function record(
 		schemaVersion: 1,
 		type: "turn_usage",
 		timestamp,
-		turn: { index: totalTokens },
+		turn: { index: totalTokens, stopReason: "stop" },
 		session: {
 			id: `session-${totalTokens}`,
 			cwd: "/work/acme/widget",
@@ -172,5 +172,6 @@ describe("dashboard queries", () => {
 		expect(filtered.summary).toMatchObject({ tokens: 100, turns: 1 });
 		expect(filtered.events).toHaveLength(1);
 		expect(filtered.events[0]?.project).toBe("alpha");
+		expect(filtered.events[0]?.stopReason).toBe("stop");
 	});
 });

@@ -124,6 +124,11 @@ CREATE TABLE IF NOT EXISTS app_setting (
 );
 `,
 	},
+	{
+		id: 2,
+		name: "telemetry_stop_reason",
+		sql: "ALTER TABLE telemetry_event ADD COLUMN stop_reason text",
+	},
 ];
 
 export function localDatabaseConfig(path: string): DatabaseConfig {

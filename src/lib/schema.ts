@@ -106,6 +106,7 @@ export const telemetryEvent = sqliteTable(
 		schemaVersion: integer("schema_version").notNull(),
 		type: text("type").notNull(),
 		turnIndex: integer("turn_index").notNull(),
+		stopReason: text("stop_reason"),
 		sessionId: text("session_id").notNull(),
 		sessionFile: text("session_file"),
 		cwd: text("cwd").notNull(),

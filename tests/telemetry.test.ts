@@ -45,7 +45,7 @@ function record(overrides: Record<string, unknown> = {}) {
 		schemaVersion: 1,
 		type: "turn_usage",
 		timestamp: "2026-01-02T03:04:05.000Z",
-		turn: { index: 7 },
+		turn: { index: 7, stopReason: "stop" },
 		session: {
 			id: "session-1",
 			file: "/tmp/session.jsonl",
@@ -93,7 +93,24 @@ describe("telemetry ingestion", () => {
 		const parsed = turnUsageRecordSchema.parse(record());
 		expect(parsed.schemaVersion).toBe(1);
 		expect(parsed.type).toBe("turn_usage");
+		expect(parsed.turn.stopReason).toBe("stop");
 		expect(parsed.usage.totalTokens).toBe(140);
+	});
+
+	test("validates the producer-owned turn_usage v1 contract fixture", async () => {
+		const fixture = await Bun.file(
+			"../pi-telemetry-minimal/contracts/turn-usage-v1.json",
+		).json();
+		const parsed = turnUsageRecordSchema.parse(fixture);
+
+		expect(parsed.turn.stopReason).toBe("aborted");
+		expect(parsed.usage.totalTokens).toBe(125);
+		expect(parsed.usage.totalTokens).not.toBe(
+			parsed.usage.input +
+				parsed.usage.output +
+				parsed.usage.cacheRead +
+				parsed.usage.cacheWrite,
+		);
 	});
 
 	test("derives token and cost totals from component fields", async () => {
@@ -125,20 +142,32 @@ describe("telemetry ingestion", () => {
 		expect(row.rows[0]?.cost_total).toBeCloseTo(0.0033, 10);
 	});
 
-	test("rejects inconsistent token totals", () => {
-		const parsed = turnUsageRecordSchema.safeParse(
+	test("accepts and stores provider-reported token totals", async () => {
+		const database = await testDb();
+		const parsed = turnUsageRecordSchema.parse(
 			record({
+				turn: { index: 8, stopReason: "aborted" },
 				usage: {
 					input: 100,
 					output: 25,
 					cacheRead: 10,
 					cacheWrite: 5,
-					totalTokens: 139,
+					totalTokens: 125,
 					cost: null,
 				},
 			}),
 		);
-		expect(parsed.success).toBe(false);
+		expect(parsed.usage.totalTokens).toBe(125);
+
+		await ingestTurnUsage(database.client, parsed);
+		const row = await database.client.execute(
+			"SELECT stop_reason, total_tokens, raw_json FROM telemetry_event",
+		);
+		expect(row.rows[0]?.stop_reason).toBe("aborted");
+		expect(row.rows[0]?.total_tokens).toBe(125);
+		expect(JSON.parse(String(row.rows[0]?.raw_json)).turn.stopReason).toBe(
+			"aborted",
+		);
 	});
 
 	test("rejects negative costs", () => {
