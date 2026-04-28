@@ -945,8 +945,8 @@ function ImportCard({
 function derivePreset(search: DashboardFilters): PresetValue {
 	if (!search.from && !search.to) return "all";
 	if (!search.from || !search.to) return "custom";
-	const from = Date.parse(`${search.from}T00:00:00`);
-	const to = Date.parse(`${search.to}T00:00:00`);
+	const from = Date.parse(`${search.from}T00:00:00Z`);
+	const to = Date.parse(`${search.to}T00:00:00Z`);
 	if (!Number.isFinite(from) || !Number.isFinite(to)) return "custom";
 	const days = Math.round((to - from) / 86_400_000) + 1;
 	const today = isoDate(new Date());

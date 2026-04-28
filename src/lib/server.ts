@@ -8,6 +8,7 @@ import {
 } from "./dashboard";
 import { appDatabase, appReady } from "./database";
 import { env } from "./env";
+import { isOverUtf8ByteLimit, telemetryImportMaxBodyBytes } from "./limits";
 import {
 	ensureStoredIngestToken,
 	importJsonl,
@@ -39,7 +40,7 @@ export const importTelemetryJsonl = createServerFn({ method: "POST" })
 	.inputValidator((input: { text: string }) => input)
 	.handler(async ({ data }) => {
 		await requireSession();
-		if (data.text.length > 5 * 1024 * 1024) {
+		if (isOverUtf8ByteLimit(data.text, telemetryImportMaxBodyBytes)) {
 			throw new Error("Import is limited to 5MB");
 		}
 		return await importJsonl(appDatabase.client, data.text);

@@ -96,6 +96,67 @@ describe("telemetry ingestion", () => {
 		expect(parsed.usage.totalTokens).toBe(140);
 	});
 
+	test("derives token and cost totals from component fields", async () => {
+		const database = await testDb();
+		const parsed = turnUsageRecordSchema.parse(
+			record({
+				usage: {
+					input: 100,
+					output: 25,
+					cacheRead: 10,
+					cacheWrite: 5,
+					cost: {
+						input: 0.001,
+						output: 0.002,
+						cacheRead: 0.0001,
+						cacheWrite: 0.0002,
+					},
+				},
+			}),
+		);
+		expect(parsed.usage.totalTokens).toBe(140);
+		expect(parsed.usage.cost?.total).toBeCloseTo(0.0033, 10);
+
+		await ingestTurnUsage(database.client, parsed);
+		const row = await database.client.execute(
+			"SELECT total_tokens, cost_total FROM telemetry_event",
+		);
+		expect(row.rows[0]?.total_tokens).toBe(140);
+		expect(row.rows[0]?.cost_total).toBeCloseTo(0.0033, 10);
+	});
+
+	test("rejects inconsistent token totals", () => {
+		const parsed = turnUsageRecordSchema.safeParse(
+			record({
+				usage: {
+					input: 100,
+					output: 25,
+					cacheRead: 10,
+					cacheWrite: 5,
+					totalTokens: 139,
+					cost: null,
+				},
+			}),
+		);
+		expect(parsed.success).toBe(false);
+	});
+
+	test("rejects negative costs", () => {
+		const parsed = turnUsageRecordSchema.safeParse(
+			record({
+				usage: {
+					input: 100,
+					output: 25,
+					cacheRead: 10,
+					cacheWrite: 5,
+					totalTokens: 140,
+					cost: { total: -0.01 },
+				},
+			}),
+		);
+		expect(parsed.success).toBe(false);
+	});
+
 	test("dedupes by stable content hash", async () => {
 		const database = await testDb();
 		const first = await ingestTurnUsage(database.client, record());

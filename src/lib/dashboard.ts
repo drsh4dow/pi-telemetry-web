@@ -98,8 +98,12 @@ function timestampMs(
 	endOfDay = false,
 ): number | undefined {
 	if (!value) return undefined;
-	const suffix = endOfDay ? "T23:59:59.999" : "T00:00:00.000";
-	const parsed = Date.parse(value.includes("T") ? value : `${value}${suffix}`);
+	const suffix = endOfDay ? "T23:59:59.999Z" : "T00:00:00.000Z";
+	const timestamp = value.includes("T") ? value : `${value}${suffix}`;
+	const zonedTimestamp = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(timestamp)
+		? timestamp
+		: `${timestamp}Z`;
+	const parsed = Date.parse(zonedTimestamp);
 	return Number.isFinite(parsed) ? parsed : undefined;
 }
 

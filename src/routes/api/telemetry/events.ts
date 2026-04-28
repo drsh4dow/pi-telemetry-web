@@ -1,12 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { appDatabase, appReady } from "~/lib/database";
+import { isOverUtf8ByteLimit, telemetryEventMaxBodyBytes } from "~/lib/limits";
 import {
 	authorizedBearer,
 	expectedIngestToken,
 	ingestTurnUsage,
 } from "~/lib/telemetry";
-
-const maxBodyBytes = 256 * 1024;
 
 export const Route = createFileRoute("/api/telemetry/events")({
 	server: {
@@ -31,11 +30,11 @@ export const Route = createFileRoute("/api/telemetry/events")({
 				const contentLength = Number(
 					request.headers.get("content-length") ?? "0",
 				);
-				if (contentLength > maxBodyBytes) {
+				if (contentLength > telemetryEventMaxBodyBytes) {
 					return Response.json({ error: "Payload too large" }, { status: 413 });
 				}
 				const text = await request.text();
-				if (text.length > maxBodyBytes) {
+				if (isOverUtf8ByteLimit(text, telemetryEventMaxBodyBytes)) {
 					return Response.json({ error: "Payload too large" }, { status: 413 });
 				}
 				try {

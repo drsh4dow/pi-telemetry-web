@@ -10,16 +10,55 @@ const optionalCleanString = z
 	.optional()
 	.or(z.literal("").transform(() => undefined));
 
+const tokenCountSchema = z.number().int().nonnegative();
+const costPartSchema = z.number().finite().nonnegative();
+
 const costSchema = z
 	.object({
-		input: z.number().finite().optional(),
-		output: z.number().finite().optional(),
-		cacheRead: z.number().finite().optional(),
-		cacheWrite: z.number().finite().optional(),
-		total: z.number().finite().optional(),
+		input: costPartSchema.optional(),
+		output: costPartSchema.optional(),
+		cacheRead: costPartSchema.optional(),
+		cacheWrite: costPartSchema.optional(),
+		total: costPartSchema.optional(),
 	})
 	.passthrough()
+	.transform((cost) => ({
+		...cost,
+		total:
+			cost.total ??
+			(cost.input ?? 0) +
+				(cost.output ?? 0) +
+				(cost.cacheRead ?? 0) +
+				(cost.cacheWrite ?? 0),
+	}))
 	.nullish();
+
+const usageSchema = z
+	.object({
+		input: tokenCountSchema,
+		output: tokenCountSchema,
+		cacheRead: tokenCountSchema,
+		cacheWrite: tokenCountSchema,
+		totalTokens: tokenCountSchema.optional(),
+		cost: costSchema,
+	})
+	.superRefine((usage, ctx) => {
+		const total =
+			usage.input + usage.output + usage.cacheRead + usage.cacheWrite;
+		if (usage.totalTokens !== undefined && usage.totalTokens !== total) {
+			ctx.addIssue({
+				code: "custom",
+				message: "totalTokens must equal token component sum",
+				path: ["totalTokens"],
+			});
+		}
+	})
+	.transform((usage) => ({
+		...usage,
+		totalTokens:
+			usage.totalTokens ??
+			usage.input + usage.output + usage.cacheRead + usage.cacheWrite,
+	}));
 
 export const turnUsageRecordSchema = z
 	.object({
@@ -55,14 +94,7 @@ export const turnUsageRecordSchema = z
 				userEmail: optionalCleanString,
 			})
 			.optional(),
-		usage: z.object({
-			input: z.number().int().nonnegative(),
-			output: z.number().int().nonnegative(),
-			cacheRead: z.number().int().nonnegative(),
-			cacheWrite: z.number().int().nonnegative(),
-			totalTokens: z.number().int().nonnegative(),
-			cost: costSchema,
-		}),
+		usage: usageSchema,
 	})
 	.passthrough();
 

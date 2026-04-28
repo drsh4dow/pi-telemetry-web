@@ -39,11 +39,12 @@ function record(
 	model: string,
 	totalTokens: number,
 	cost: number,
+	timestamp = "2026-01-02T03:04:05.000Z",
 ) {
 	return {
 		schemaVersion: 1,
 		type: "turn_usage",
-		timestamp: "2026-01-02T03:04:05.000Z",
+		timestamp,
 		turn: { index: totalTokens },
 		session: {
 			id: `session-${totalTokens}`,
@@ -64,6 +65,85 @@ function record(
 }
 
 describe("dashboard queries", () => {
+	test("date-only filters use UTC day boundaries", async () => {
+		const database = await testDb();
+		await ingestTurnUsage(
+			database.client,
+			record(
+				"alpha",
+				"a@example.com",
+				"sonnet",
+				100,
+				0.01,
+				"2026-01-01T23:30:00.000Z",
+			),
+		);
+		await ingestTurnUsage(
+			database.client,
+			record(
+				"alpha",
+				"a@example.com",
+				"sonnet",
+				200,
+				0.02,
+				"2026-01-02T00:30:00.000Z",
+			),
+		);
+		await ingestTurnUsage(
+			database.client,
+			record(
+				"alpha",
+				"a@example.com",
+				"sonnet",
+				300,
+				0.03,
+				"2026-01-02T23:30:00.000Z",
+			),
+		);
+		await ingestTurnUsage(
+			database.client,
+			record(
+				"alpha",
+				"a@example.com",
+				"sonnet",
+				400,
+				0.04,
+				"2026-01-03T00:30:00.000Z",
+			),
+		);
+
+		const data = await getDashboardData(database.client, {
+			from: "2026-01-02",
+			to: "2026-01-02",
+		});
+
+		expect(data.summary.turns).toBe(2);
+		expect(data.summary.tokens).toBe(500);
+	});
+
+	test("datetime filters without an explicit zone are treated as UTC", async () => {
+		const database = await testDb();
+		await ingestTurnUsage(
+			database.client,
+			record(
+				"alpha",
+				"a@example.com",
+				"sonnet",
+				100,
+				0.01,
+				"2026-01-02T03:00:00.000Z",
+			),
+		);
+
+		const data = await getDashboardData(database.client, {
+			from: "2026-01-02T00:00:00.000",
+			to: "2026-01-02T04:00:00.000",
+		});
+
+		expect(data.summary.turns).toBe(1);
+		expect(data.summary.tokens).toBe(100);
+	});
+
 	test("summarizes and filters events", async () => {
 		const database = await testDb();
 		await ingestTurnUsage(
