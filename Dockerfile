@@ -21,6 +21,5 @@ RUN addgroup -S app && adduser -S app -G app && mkdir -p /data && chown -R app:a
 COPY --from=build --chown=app:app /app/.output ./.output
 USER app
 EXPOSE 3000
-VOLUME ["/data"]
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 CMD wget -qO- http://127.0.0.1:${PORT}/healthz >/dev/null || exit 1
 CMD ["bun", ".output/server/index.mjs"]
