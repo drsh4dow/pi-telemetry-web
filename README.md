@@ -114,7 +114,7 @@ SQLite lives at `/data/pi-telemetry-web.sqlite` by default in the container. Do 
 
 ## Railway
 
-Deploy with the Dockerfile and attach a Railway volume mounted at `/data`.
+Deploy with the Dockerfile and attach a Railway volume mounted at `/data`. The container fixes `/data` ownership on startup, so Railway's root-owned volume can be used by the non-root app process.
 
 Recommended variables:
 
@@ -129,6 +129,8 @@ BETTER_AUTH_SECRET=<random 32+ char secret>
 ```
 
 Use one replica with the local backend. For multiple replicas, use Turso.
+
+If you override Railway's runtime UID, keep startup as root (or set `RAILWAY_RUN_UID=0`) so the entrypoint can repair volume ownership before dropping privileges.
 
 ## Vercel
 
