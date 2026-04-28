@@ -4,8 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { getDashboardData } from "../src/lib/dashboard";
 import {
+	localDatabaseConfig,
 	migrateDatabase,
 	openTelemetryDatabase,
+	prepareDatabase,
 	type TelemetryDatabase,
 } from "../src/lib/database";
 import { ingestTurnUsage } from "../src/lib/telemetry";
@@ -22,9 +24,12 @@ afterEach(async () => {
 async function testDb() {
 	const dir = await mkdtemp(join(tmpdir(), "pi-telemetry-web-dashboard-test-"));
 	tempDirs.push(dir);
-	const database = openTelemetryDatabase(join(dir, "test.sqlite"));
+	const database = openTelemetryDatabase(
+		localDatabaseConfig(join(dir, "test.sqlite")),
+	);
 	databases.push(database);
-	migrateDatabase(database.client);
+	await prepareDatabase(database, { migrate: false });
+	await migrateDatabase(database.client);
 	return database;
 }
 
@@ -61,17 +66,19 @@ function record(
 describe("dashboard queries", () => {
 	test("summarizes and filters events", async () => {
 		const database = await testDb();
-		ingestTurnUsage(
+		await ingestTurnUsage(
 			database.client,
 			record("alpha", "a@example.com", "sonnet", 100, 0.01),
 		);
-		ingestTurnUsage(
+		await ingestTurnUsage(
 			database.client,
 			record("beta", "b@example.com", "opus", 200, 0.02),
 		);
 
-		const all = getDashboardData(database.client, {});
-		const filtered = getDashboardData(database.client, { project: "alpha" });
+		const all = await getDashboardData(database.client, {});
+		const filtered = await getDashboardData(database.client, {
+			project: "alpha",
+		});
 
 		expect(all.summary).toMatchObject({
 			cost: 0.03,

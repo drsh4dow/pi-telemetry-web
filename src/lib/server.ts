@@ -6,7 +6,7 @@ import {
 	type DashboardFilters,
 	getDashboardData,
 } from "./dashboard";
-import { appDatabase } from "./database";
+import { appDatabase, appReady } from "./database";
 import { env } from "./env";
 import {
 	ensureStoredIngestToken,
@@ -16,6 +16,7 @@ import {
 
 export const getSession = createServerFn({ method: "GET" }).handler(
 	async () => {
+		await appReady;
 		const headers = getRequestHeaders();
 		return auth.api.getSession({ headers });
 	},
@@ -23,7 +24,7 @@ export const getSession = createServerFn({ method: "GET" }).handler(
 
 export const getSetupState = createServerFn({ method: "GET" }).handler(
 	async () => {
-		return { required: setupRequired() };
+		return { required: await setupRequired() };
 	},
 );
 
@@ -31,7 +32,7 @@ export const getDashboard = createServerFn({ method: "GET" })
 	.inputValidator((filters: DashboardFilters) => filters)
 	.handler(async ({ data }) => {
 		await requireSession();
-		return getDashboardData(appDatabase.client, data ?? {});
+		return await getDashboardData(appDatabase.client, data ?? {});
 	});
 
 export const importTelemetryJsonl = createServerFn({ method: "POST" })
@@ -41,7 +42,7 @@ export const importTelemetryJsonl = createServerFn({ method: "POST" })
 		if (data.text.length > 5 * 1024 * 1024) {
 			throw new Error("Import is limited to 5MB");
 		}
-		return importJsonl(appDatabase.client, data.text);
+		return await importJsonl(appDatabase.client, data.text);
 	});
 
 export const getSettings = createServerFn({ method: "GET" }).handler(
@@ -49,7 +50,7 @@ export const getSettings = createServerFn({ method: "GET" }).handler(
 		await requireSession();
 		const token =
 			env.PI_TELEMETRY_INGEST_TOKEN ??
-			ensureStoredIngestToken(appDatabase.client);
+			(await ensureStoredIngestToken(appDatabase.client));
 		return {
 			ingestPath: "/api/telemetry/events",
 			ingestToken: token,
@@ -66,19 +67,20 @@ export const rotateIngestToken = createServerFn({ method: "POST" }).handler(
 				"PI_TELEMETRY_INGEST_TOKEN is set; rotate it in environment configuration.",
 			);
 		}
-		return { ingestToken: rotateStoredIngestToken(appDatabase.client) };
+		return { ingestToken: await rotateStoredIngestToken(appDatabase.client) };
 	},
 );
 
 export const clearTelemetryEvents = createServerFn({ method: "POST" }).handler(
 	async () => {
 		await requireSession();
-		clearTelemetry(appDatabase.client);
+		await clearTelemetry(appDatabase.client);
 		return { ok: true };
 	},
 );
 
 async function requireSession() {
+	await appReady;
 	const headers = getRequestHeaders();
 	const session = await auth.api.getSession({ headers });
 	if (!session) throw new Error("Unauthorized");

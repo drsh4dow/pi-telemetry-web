@@ -2,20 +2,29 @@
 
 Self-hosted telemetry dashboard for [`pi-telemetry-minimal`](https://github.com/drsh4dow/pi-telemetry-minimal).
 
-It receives the existing `turn_usage` webhook payload, stores validated events in SQLite, and shows usage by project, developer, model, provider, and time range.
+It receives the existing `turn_usage` webhook payload, stores validated events in SQLite-compatible storage, and shows usage by project, developer, model, provider, and time range.
 
 ## Features
 
 - TanStack Start + React
 - Bun-first runtime
-- SQLite storage
+- Local SQLite or Turso/libSQL storage
 - Better Auth email/password login
 - First-run admin setup
 - Static bearer token ingestion
 - shadcn-style Tailwind UI with Base UI dialog primitive
 - Recharts dashboard charts
 - JSONL upload for existing `events.jsonl`
-- Docker-first deployment
+- Dockerfile-only deployment path
+
+## Deployment model
+
+| Target | Database | Notes |
+| --- | --- | --- |
+| Docker/Railway/Fly/etc. | `DATABASE_BACKEND=local` | Mount persistent storage at `/data`. Run a single app instance against the local SQLite file. |
+| Vercel/serverless | `DATABASE_BACKEND=turso` | Local filesystem storage is not durable on serverless platforms. Use Turso. |
+
+Local SQLite is the default because it is the easiest durable Docker deployment. Use Turso for serverless or multi-instance deployments.
 
 ## Local development
 
@@ -50,39 +59,96 @@ Authorization: Bearer <token>
 Content-Type: application/json
 ```
 
-## Docker
+## Configuration
+
+Required production settings:
 
 ```bash
-cp .env.example .env
-# Set BETTER_AUTH_SECRET to a strong random value.
-docker compose up --build
+NODE_ENV=production
+BETTER_AUTH_URL=https://your-app.example.com
+BETTER_AUTH_SECRET=<random 32+ char secret>
 ```
 
-SQLite lives in the `/data` volume. Do not run production without a persistent volume.
+Database settings:
+
+```bash
+DATABASE_BACKEND=local # default
+DATA_DIR=/data
+# DB_PATH=/data/pi-telemetry-web.sqlite
+```
+
+For Turso:
+
+```bash
+DATABASE_BACKEND=turso
+TURSO_DATABASE_URL=libsql://your-database.turso.io
+TURSO_AUTH_TOKEN=<token>
+```
+
+Optional settings:
+
+```bash
+MIGRATE_ON_STARTUP=true
+PI_TELEMETRY_INGEST_TOKEN=<externally-managed-token>
+PORT=3000
+```
+
+If `PI_TELEMETRY_INGEST_TOKEN` is set, token rotation in the UI is disabled and rotation must happen in environment configuration.
+
+## Docker
+
+Build and run with the Dockerfile directly. Mount `/data` to persistent storage.
+
+```bash
+docker build -t pi-telemetry-web .
+docker run --rm \
+  -p 3000:3000 \
+  -v pi-telemetry-data:/data \
+  -e NODE_ENV=production \
+  -e BETTER_AUTH_URL=http://localhost:3000 \
+  -e BETTER_AUTH_SECRET=<random 32+ char secret> \
+  pi-telemetry-web
+```
+
+SQLite lives at `/data/pi-telemetry-web.sqlite` by default in the container. Do not run the local backend in production without persistent storage.
 
 ## Railway
 
-Deploy with the Dockerfile.
+Deploy with the Dockerfile and attach a Railway volume mounted at `/data`.
 
 Recommended variables:
 
 ```bash
 NODE_ENV=production
 PORT=3000
+DATABASE_BACKEND=local
 DATA_DIR=/data
+DB_PATH=/data/pi-telemetry-web.sqlite
 BETTER_AUTH_URL=https://your-app.up.railway.app
 BETTER_AUTH_SECRET=<random 32+ char secret>
 ```
 
-Attach a Railway volume mounted at `/data`.
+Use one replica with the local backend. For multiple replicas, use Turso.
 
-Optional:
+## Vercel
+
+Use Turso. Do not use the local backend on Vercel; Vercel function filesystems are not durable application storage.
+
+Recommended variables:
 
 ```bash
-PI_TELEMETRY_INGEST_TOKEN=<externally-managed-token>
+DATABASE_BACKEND=turso
+TURSO_DATABASE_URL=libsql://your-database.turso.io
+TURSO_AUTH_TOKEN=<token>
+BETTER_AUTH_URL=https://your-app.vercel.app
+BETTER_AUTH_SECRET=<random 32+ char secret>
 ```
 
-If this env var is set, token rotation in the UI is disabled and rotation must happen in Railway/env config.
+Build command:
+
+```bash
+bun run build:vercel
+```
 
 ## Operations
 
@@ -91,6 +157,8 @@ Run migrations explicitly:
 ```bash
 bun run migrate
 ```
+
+Startup migrations are enabled by default. Set `MIGRATE_ON_STARTUP=false` if migrations are handled separately.
 
 Reset the admin account while preserving telemetry:
 
@@ -106,12 +174,15 @@ Health check:
 curl http://localhost:3000/healthz
 ```
 
+Backups are deployment-specific: snapshot the mounted volume for local SQLite, or use Turso's backup/restore tooling for Turso databases.
+
 ## Validation
 
 ```bash
 bun test
 bun run typecheck
 bun run check
-bun run build
+bun run build:docker
+bun run build:vercel
 docker build -t pi-telemetry-web .
 ```

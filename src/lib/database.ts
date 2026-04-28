@@ -1,12 +1,15 @@
-import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import { drizzle } from "drizzle-orm/bun-sqlite";
-import { databasePath } from "./env";
+import { type Client, createClient, type InArgs } from "@libsql/client";
+import { drizzle } from "drizzle-orm/libsql";
+import { type DatabaseConfig, databaseConfig, env } from "./env";
 import { schema } from "./schema";
 
+export type DatabaseClient = Client;
+
 export interface TelemetryDatabase {
-	client: Database;
+	backend: DatabaseConfig["backend"];
+	client: DatabaseClient;
 	db: ReturnType<typeof drizzle<typeof schema>>;
 }
 
@@ -123,38 +126,93 @@ CREATE TABLE IF NOT EXISTS app_setting (
 	},
 ];
 
-export function openTelemetryDatabase(path: string): TelemetryDatabase {
-	if (path !== ":memory:") {
-		mkdirSync(dirname(path), { recursive: true });
-	}
-	const client = new Database(path, { create: true });
-	client.exec("PRAGMA foreign_keys = ON");
-	client.exec("PRAGMA journal_mode = WAL");
-	return { client, db: drizzle({ client, schema }) };
+export function localDatabaseConfig(path: string): DatabaseConfig {
+	return { backend: "local", path, url: `file:${path}` };
 }
 
-export function migrateDatabase(client: Database): void {
-	client.exec("PRAGMA foreign_keys = ON");
-	client.exec("BEGIN");
-	try {
-		client.exec(
-			"CREATE TABLE IF NOT EXISTS migration (id integer PRIMARY KEY, name text NOT NULL, applied_at_ms integer NOT NULL)",
+export function openTelemetryDatabase(
+	config: DatabaseConfig = databaseConfig,
+): TelemetryDatabase {
+	if (config.backend === "local") {
+		mkdirSync(dirname(config.path), { recursive: true });
+	}
+	const client = createClient({
+		url: config.url,
+		authToken: config.backend === "turso" ? config.authToken : undefined,
+	});
+	return { backend: config.backend, client, db: drizzle({ client, schema }) };
+}
+
+export async function prepareDatabase(
+	database: TelemetryDatabase,
+	options: { migrate: boolean } = { migrate: true },
+): Promise<void> {
+	if (database.backend === "local") {
+		await database.client.execute("PRAGMA foreign_keys = ON");
+		await database.client.execute("PRAGMA journal_mode = WAL");
+	}
+	if (options.migrate) await migrateDatabase(database.client);
+}
+
+export async function migrateDatabase(client: DatabaseClient): Promise<void> {
+	await client.execute(
+		"CREATE TABLE IF NOT EXISTS migration (id integer PRIMARY KEY, name text NOT NULL, applied_at_ms integer NOT NULL)",
+	);
+	for (const migration of migrations) {
+		const existing = await dbGet<{ found: number }>(
+			client,
+			"SELECT 1 AS found FROM migration WHERE id = ?",
+			[migration.id],
 		);
-		const hasMigration = client.query("SELECT 1 FROM migration WHERE id = ?");
-		const insertMigration = client.query(
-			"INSERT INTO migration (id, name, applied_at_ms) VALUES (?, ?, ?)",
+		if (existing) continue;
+		await client.batch(
+			[
+				...migrationStatements(migration.sql),
+				{
+					sql: "INSERT INTO migration (id, name, applied_at_ms) VALUES (?, ?, ?)",
+					args: [migration.id, migration.name, Date.now()],
+				},
+			],
+			"write",
 		);
-		for (const migration of migrations) {
-			if (hasMigration.get(migration.id)) continue;
-			client.exec(migration.sql);
-			insertMigration.run(migration.id, migration.name, Date.now());
-		}
-		client.exec("COMMIT");
-	} catch (error) {
-		client.exec("ROLLBACK");
-		throw error;
 	}
 }
 
-export const appDatabase = openTelemetryDatabase(databasePath);
-migrateDatabase(appDatabase.client);
+export async function dbGet<T>(
+	client: DatabaseClient,
+	sql: string,
+	args: InArgs = [],
+): Promise<T | null> {
+	const result = await client.execute({ sql, args });
+	return (result.rows[0] as T | undefined) ?? null;
+}
+
+export async function dbAll<T>(
+	client: DatabaseClient,
+	sql: string,
+	args: InArgs = [],
+): Promise<T[]> {
+	const result = await client.execute({ sql, args });
+	return result.rows as T[];
+}
+
+export async function dbRun(
+	client: DatabaseClient,
+	sql: string,
+	args: InArgs = [],
+): Promise<number> {
+	const result = await client.execute({ sql, args });
+	return result.rowsAffected;
+}
+
+function migrationStatements(sql: string): string[] {
+	return sql
+		.split(";")
+		.map((statement) => statement.trim())
+		.filter(Boolean);
+}
+
+export const appDatabase = openTelemetryDatabase();
+export const appReady = prepareDatabase(appDatabase, {
+	migrate: env.MIGRATE_ON_STARTUP,
+});

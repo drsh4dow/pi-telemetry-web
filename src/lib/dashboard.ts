@@ -1,4 +1,4 @@
-import type { Database } from "bun:sqlite";
+import { type DatabaseClient, dbAll, dbGet, dbRun } from "./database";
 
 export interface DashboardFilters {
 	from?: string;
@@ -144,56 +144,57 @@ function whereClause(
 	};
 }
 
-function stringList(client: Database, column: string): string[] {
-	return (
-		client
-			.query(
-				`SELECT DISTINCT ${column} AS value FROM telemetry_event WHERE ${column} IS NOT NULL AND ${column} != '' ORDER BY ${column}`,
-			)
-			.all() as Array<{ value: string }>
-	).map((row) => row.value);
+async function stringList(
+	client: DatabaseClient,
+	column: string,
+): Promise<string[]> {
+	const rows = await dbAll<{ value: string }>(
+		client,
+		`SELECT DISTINCT ${column} AS value FROM telemetry_event WHERE ${column} IS NOT NULL AND ${column} != '' ORDER BY ${column}`,
+	);
+	return rows.map((row) => row.value);
 }
 
-function summaryFor(
-	client: Database,
+async function summaryFor(
+	client: DatabaseClient,
 	filters: DashboardFilters,
 	override?: { fromMs?: number; toMs?: number },
-): DashboardSummary {
+): Promise<DashboardSummary> {
 	const where = whereClause(filters, override);
-	const row = client
-		.query(
-			`SELECT
-				COUNT(*) AS turns,
-				COALESCE(SUM(total_tokens), 0) AS tokens,
-				COALESCE(SUM(cost_total), 0) AS cost,
-				COUNT(DISTINCT developer) AS developers,
-				COUNT(DISTINCT project) AS projects
-			FROM telemetry_event ${where.sql}`,
-		)
-		.get(...where.params) as DashboardSummary | null;
+	const row = await dbGet<DashboardSummary>(
+		client,
+		`SELECT
+			COUNT(*) AS turns,
+			COALESCE(SUM(total_tokens), 0) AS tokens,
+			COALESCE(SUM(cost_total), 0) AS cost,
+			COUNT(DISTINCT developer) AS developers,
+			COUNT(DISTINCT project) AS projects
+		FROM telemetry_event ${where.sql}`,
+		where.params,
+	);
 	return row ?? { cost: 0, developers: 0, projects: 0, tokens: 0, turns: 0 };
 }
 
-export function getDashboardData(
-	client: Database,
+export async function getDashboardData(
+	client: DatabaseClient,
 	filters: DashboardFilters,
-): DashboardData {
+): Promise<DashboardData> {
 	const where = whereClause(filters);
 
 	// Resolve effective window for prev-period comparison.
 	const nowMs = Date.now();
-	const span = client
-		.query(
-			`SELECT MIN(event_timestamp_ms) AS minMs, MAX(event_timestamp_ms) AS maxMs FROM telemetry_event ${where.sql}`,
-		)
-		.get(...where.params) as { minMs: number | null; maxMs: number | null };
-	const effectiveFrom = where.fromMs ?? span.minMs ?? nowMs;
-	const effectiveTo = where.toMs ?? span.maxMs ?? nowMs;
+	const span = await dbGet<{ minMs: number | null; maxMs: number | null }>(
+		client,
+		`SELECT MIN(event_timestamp_ms) AS minMs, MAX(event_timestamp_ms) AS maxMs FROM telemetry_event ${where.sql}`,
+		where.params,
+	);
+	const effectiveFrom = where.fromMs ?? span?.minMs ?? nowMs;
+	const effectiveTo = where.toMs ?? span?.maxMs ?? nowMs;
 	const windowSpan = Math.max(effectiveTo - effectiveFrom, DAY_MS);
 	const days = Math.max(1, Math.round(windowSpan / DAY_MS));
 
-	const summary = summaryFor(client, filters);
-	const previous = summaryFor(client, filters, {
+	const summary = await summaryFor(client, filters);
+	const previous = await summaryFor(client, filters, {
 		fromMs: effectiveFrom - windowSpan,
 		toMs: effectiveFrom - 1,
 	});
@@ -205,67 +206,67 @@ export function getDashboardData(
 			? "strftime('%Y-%m-%d %H:00', event_timestamp_ms / 1000, 'unixepoch')"
 			: "date(event_timestamp_ms / 1000, 'unixepoch')";
 
-	const series = client
-		.query(
-			`SELECT
-				${bucketExpr} AS date,
-				COUNT(*) AS turns,
-				COALESCE(SUM(total_tokens), 0) AS tokens,
-				COALESCE(SUM(cost_total), 0) AS cost
-			FROM telemetry_event ${where.sql}
-			GROUP BY date
-			ORDER BY date`,
-		)
-		.all(...where.params) as DashboardData["series"];
+	const series = await dbAll<DashboardData["series"][number]>(
+		client,
+		`SELECT
+			${bucketExpr} AS date,
+			COUNT(*) AS turns,
+			COALESCE(SUM(total_tokens), 0) AS tokens,
+			COALESCE(SUM(cost_total), 0) AS cost
+		FROM telemetry_event ${where.sql}
+		GROUP BY date
+		ORDER BY date`,
+		where.params,
+	);
 
 	const group = (column: string) =>
-		client
-			.query(
-				`SELECT
-					COALESCE(${column}, 'Unknown') AS name,
-					COUNT(*) AS turns,
-					COALESCE(SUM(total_tokens), 0) AS tokens,
-					COALESCE(SUM(cost_total), 0) AS cost
-				FROM telemetry_event ${where.sql}
-				GROUP BY name
-				ORDER BY tokens DESC
-				LIMIT 8`,
-			)
-			.all(...where.params) as Array<{
+		dbAll<{
 			name: string;
 			turns: number;
 			tokens: number;
 			cost: number;
-		}>;
+		}>(
+			client,
+			`SELECT
+				COALESCE(${column}, 'Unknown') AS name,
+				COUNT(*) AS turns,
+				COALESCE(SUM(total_tokens), 0) AS tokens,
+				COALESCE(SUM(cost_total), 0) AS cost
+			FROM telemetry_event ${where.sql}
+			GROUP BY name
+			ORDER BY tokens DESC
+			LIMIT 8`,
+			where.params,
+		);
 
 	// Stacked area: top 5 models by tokens, with "Others" bucket per day.
 	const topModels = (
-		client
-			.query(
-				`SELECT model AS name, COALESCE(SUM(total_tokens), 0) AS tokens
-				 FROM telemetry_event ${where.sql}
-				 GROUP BY model
-				 ORDER BY tokens DESC
-				 LIMIT 5`,
-			)
-			.all(...where.params) as Array<{ name: string; tokens: number }>
+		await dbAll<{ name: string; tokens: number }>(
+			client,
+			`SELECT model AS name, COALESCE(SUM(total_tokens), 0) AS tokens
+			 FROM telemetry_event ${where.sql}
+			 GROUP BY model
+			 ORDER BY tokens DESC
+			 LIMIT 5`,
+			where.params,
+		)
 	).map((row) => row.name);
 
-	const perDayModel = client
-		.query(
-			`SELECT
-				${bucketExpr} AS date,
-				model,
-				COALESCE(SUM(total_tokens), 0) AS tokens
-			FROM telemetry_event ${where.sql}
-			GROUP BY date, model
-			ORDER BY date`,
-		)
-		.all(...where.params) as Array<{
+	const perDayModel = await dbAll<{
 		date: string;
 		model: string;
 		tokens: number;
-	}>;
+	}>(
+		client,
+		`SELECT
+			${bucketExpr} AS date,
+			model,
+			COALESCE(SUM(total_tokens), 0) AS tokens
+		FROM telemetry_event ${where.sql}
+		GROUP BY date, model
+		ORDER BY date`,
+		where.params,
+	);
 
 	const dates = series.map((s) => s.date);
 	const modelSet = new Set(topModels);
@@ -290,20 +291,20 @@ export function getDashboardData(
 	const cells: number[][] = Array.from({ length: 7 }, () =>
 		Array.from({ length: 24 }, () => 0),
 	);
-	const heatRows = client
-		.query(
-			`SELECT
-				CAST(strftime('%w', event_timestamp_ms / 1000, 'unixepoch') AS INTEGER) AS dow,
-				CAST(strftime('%H', event_timestamp_ms / 1000, 'unixepoch') AS INTEGER) AS hour,
-				COALESCE(SUM(total_tokens), 0) AS tokens
-			FROM telemetry_event ${where.sql}
-			GROUP BY dow, hour`,
-		)
-		.all(...where.params) as Array<{
+	const heatRows = await dbAll<{
 		dow: number;
 		hour: number;
 		tokens: number;
-	}>;
+	}>(
+		client,
+		`SELECT
+			CAST(strftime('%w', event_timestamp_ms / 1000, 'unixepoch') AS INTEGER) AS dow,
+			CAST(strftime('%H', event_timestamp_ms / 1000, 'unixepoch') AS INTEGER) AS hour,
+			COALESCE(SUM(total_tokens), 0) AS tokens
+		FROM telemetry_event ${where.sql}
+		GROUP BY dow, hour`,
+		where.params,
+	);
 	let heatMax = 0;
 	for (const row of heatRows) {
 		if (row.dow < 0 || row.dow > 6 || row.hour < 0 || row.hour > 23) continue;
@@ -313,40 +314,40 @@ export function getDashboardData(
 		if (row.tokens > heatMax) heatMax = row.tokens;
 	}
 
-	const events = client
-		.query(
-			`SELECT
-				id,
-				datetime(event_timestamp_ms / 1000, 'unixepoch') AS timestamp,
-				turn_index AS turnIndex,
-				session_id AS sessionId,
-				session_file AS sessionFile,
-				cwd,
-				cwd_name AS cwdName,
-				api,
-				provider,
-				model,
-				team,
-				project,
-				developer,
-				git_root AS gitRoot,
-				git_remote AS gitRemote,
-				git_branch AS gitBranch,
-				git_commit AS gitCommit,
-				git_user_name AS gitUserName,
-				git_user_email AS gitUserEmail,
-				input_tokens AS inputTokens,
-				output_tokens AS outputTokens,
-				cache_read_tokens AS cacheReadTokens,
-				cache_write_tokens AS cacheWriteTokens,
-				total_tokens AS totalTokens,
-				cost_total AS costTotal,
-				raw_json AS rawJson
-			FROM telemetry_event ${where.sql}
-			ORDER BY event_timestamp_ms DESC, id DESC
-			LIMIT 100`,
-		)
-		.all(...where.params) as DashboardEvent[];
+	const events = await dbAll<DashboardEvent>(
+		client,
+		`SELECT
+			id,
+			datetime(event_timestamp_ms / 1000, 'unixepoch') AS timestamp,
+			turn_index AS turnIndex,
+			session_id AS sessionId,
+			session_file AS sessionFile,
+			cwd,
+			cwd_name AS cwdName,
+			api,
+			provider,
+			model,
+			team,
+			project,
+			developer,
+			git_root AS gitRoot,
+			git_remote AS gitRemote,
+			git_branch AS gitBranch,
+			git_commit AS gitCommit,
+			git_user_name AS gitUserName,
+			git_user_email AS gitUserEmail,
+			input_tokens AS inputTokens,
+			output_tokens AS outputTokens,
+			cache_read_tokens AS cacheReadTokens,
+			cache_write_tokens AS cacheWriteTokens,
+			total_tokens AS totalTokens,
+			cost_total AS costTotal,
+			raw_json AS rawJson
+		FROM telemetry_event ${where.sql}
+		ORDER BY event_timestamp_ms DESC, id DESC
+		LIMIT 100`,
+		where.params,
+	);
 
 	return {
 		summary,
@@ -360,20 +361,20 @@ export function getDashboardData(
 		series,
 		modelSeries: { dates, models: modelLabels, values: modelValues },
 		heatmap: { cells, max: heatMax },
-		byProject: group("project"),
-		byDeveloper: group("developer"),
-		byModel: group("model"),
+		byProject: await group("project"),
+		byDeveloper: await group("developer"),
+		byModel: await group("model"),
 		filters: {
-			teams: stringList(client, "team"),
-			projects: stringList(client, "project"),
-			developers: stringList(client, "developer"),
-			models: stringList(client, "model"),
-			providers: stringList(client, "provider"),
+			teams: await stringList(client, "team"),
+			projects: await stringList(client, "project"),
+			developers: await stringList(client, "developer"),
+			models: await stringList(client, "model"),
+			providers: await stringList(client, "provider"),
 		},
 		events,
 	};
 }
 
-export function clearTelemetry(client: Database): void {
-	client.query("DELETE FROM telemetry_event").run();
+export async function clearTelemetry(client: DatabaseClient): Promise<void> {
+	await dbRun(client, "DELETE FROM telemetry_event");
 }

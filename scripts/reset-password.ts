@@ -1,4 +1,4 @@
-import { appDatabase } from "../src/lib/database";
+import { appDatabase, appReady, dbGet } from "../src/lib/database";
 
 const email = process.env.ADMIN_EMAIL;
 
@@ -7,27 +7,29 @@ if (!email) {
 	process.exit(1);
 }
 
-appDatabase.client.exec("BEGIN");
+await appReady;
+
 try {
-	const user = appDatabase.client
-		.query("SELECT id FROM user WHERE email = ?")
-		.get(email) as { id: string } | null;
+	const user = await dbGet<{ id: string }>(
+		appDatabase.client,
+		"SELECT id FROM user WHERE email = ?",
+		[email],
+	);
 	if (!user) {
 		throw new Error(`No admin user found for ${email}`);
 	}
-	appDatabase.client
-		.query("DELETE FROM session WHERE user_id = ?")
-		.run(user.id);
-	appDatabase.client
-		.query("DELETE FROM account WHERE user_id = ?")
-		.run(user.id);
-	appDatabase.client.query("DELETE FROM user WHERE id = ?").run(user.id);
-	appDatabase.client.exec("COMMIT");
+	await appDatabase.client.batch(
+		[
+			{ sql: "DELETE FROM session WHERE user_id = ?", args: [user.id] },
+			{ sql: "DELETE FROM account WHERE user_id = ?", args: [user.id] },
+			{ sql: "DELETE FROM user WHERE id = ?", args: [user.id] },
+		],
+		"write",
+	);
 	console.info(
 		"Admin account removed. Open the app to create a new admin user. Telemetry data was preserved.",
 	);
 } catch (error) {
-	appDatabase.client.exec("ROLLBACK");
 	console.error(error instanceof Error ? error.message : String(error));
 	process.exit(1);
 } finally {

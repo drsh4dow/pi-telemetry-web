@@ -1,5 +1,6 @@
-import { appDatabase, migrateDatabase } from "../src/lib/database";
+import { appDatabase, appReady, migrateDatabase } from "../src/lib/database";
 
-migrateDatabase(appDatabase.client);
+await appReady;
+await migrateDatabase(appDatabase.client);
 console.info("Database migrated.");
 appDatabase.client.close();

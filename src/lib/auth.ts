@@ -2,19 +2,21 @@ import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { betterAuth } from "better-auth";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
-import { appDatabase } from "./database";
+import { appDatabase, appReady, dbGet } from "./database";
 import { env } from "./env";
 import { schema } from "./schema";
 
-export function userCount(): number {
-	const row = appDatabase.client
-		.query("SELECT COUNT(*) AS count FROM user")
-		.get() as { count: number };
-	return row.count;
+export async function userCount(): Promise<number> {
+	await appReady;
+	const row = await dbGet<{ count: number }>(
+		appDatabase.client,
+		"SELECT COUNT(*) AS count FROM user",
+	);
+	return row?.count ?? 0;
 }
 
-export function setupRequired(): boolean {
-	return userCount() === 0;
+export async function setupRequired(): Promise<boolean> {
+	return (await userCount()) === 0;
 }
 
 export const auth = betterAuth({
@@ -32,7 +34,7 @@ export const auth = betterAuth({
 	hooks: {
 		before: createAuthMiddleware(async (ctx) => {
 			if (ctx.path !== "/sign-up/email") return;
-			if (setupRequired()) return;
+			if (await setupRequired()) return;
 			throw new APIError("BAD_REQUEST", {
 				message: "The initial admin user already exists.",
 			});

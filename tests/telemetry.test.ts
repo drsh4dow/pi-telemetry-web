@@ -3,8 +3,10 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+	localDatabaseConfig,
 	migrateDatabase,
 	openTelemetryDatabase,
+	prepareDatabase,
 	type TelemetryDatabase,
 } from "../src/lib/database";
 import {
@@ -29,9 +31,12 @@ afterEach(async () => {
 async function testDb() {
 	const dir = await mkdtemp(join(tmpdir(), "pi-telemetry-web-test-"));
 	tempDirs.push(dir);
-	const database = openTelemetryDatabase(join(dir, "test.sqlite"));
+	const database = openTelemetryDatabase(
+		localDatabaseConfig(join(dir, "test.sqlite")),
+	);
 	databases.push(database);
-	migrateDatabase(database.client);
+	await prepareDatabase(database, { migrate: false });
+	await migrateDatabase(database.client);
 	return database;
 }
 
@@ -93,16 +98,16 @@ describe("telemetry ingestion", () => {
 
 	test("dedupes by stable content hash", async () => {
 		const database = await testDb();
-		const first = ingestTurnUsage(database.client, record());
-		const second = ingestTurnUsage(database.client, record());
-		const row = database.client
-			.query("SELECT COUNT(*) AS count FROM telemetry_event")
-			.get() as { count: number };
+		const first = await ingestTurnUsage(database.client, record());
+		const second = await ingestTurnUsage(database.client, record());
+		const row = await database.client.execute(
+			"SELECT COUNT(*) AS count FROM telemetry_event",
+		);
 
 		expect(first.inserted).toBe(true);
 		expect(second.inserted).toBe(false);
 		expect(first.hash).toBe(second.hash);
-		expect(row.count).toBe(1);
+		expect(row.rows[0]?.count).toBe(1);
 	});
 
 	test("hash is independent of object key order", () => {
@@ -114,7 +119,7 @@ describe("telemetry ingestion", () => {
 	test("imports jsonl and reports invalid and duplicate lines", async () => {
 		const database = await testDb();
 		const text = `${JSON.stringify(record())}\n${JSON.stringify(record())}\nnot json\n`;
-		expect(importJsonl(database.client, text)).toEqual({
+		expect(await importJsonl(database.client, text)).toEqual({
 			duplicate: 1,
 			inserted: 1,
 			invalid: 1,
@@ -125,7 +130,7 @@ describe("telemetry ingestion", () => {
 describe("ingest token", () => {
 	test("authorizes bearer token with constant-length compare guard", async () => {
 		const database = await testDb();
-		const token = ensureStoredIngestToken(database.client);
+		const token = await ensureStoredIngestToken(database.client);
 		expect(authorizedBearer(`Bearer ${token}`, token)).toBe(true);
 		expect(authorizedBearer("Bearer wrong", token)).toBe(false);
 		expect(authorizedBearer(null, token)).toBe(false);
@@ -133,9 +138,9 @@ describe("ingest token", () => {
 
 	test("rotates the stored token", async () => {
 		const database = await testDb();
-		const first = ensureStoredIngestToken(database.client);
-		const second = rotateStoredIngestToken(database.client);
+		const first = await ensureStoredIngestToken(database.client);
+		const second = await rotateStoredIngestToken(database.client);
 		expect(second).not.toBe(first);
-		expect(ensureStoredIngestToken(database.client)).toBe(second);
+		expect(await ensureStoredIngestToken(database.client)).toBe(second);
 	});
 });

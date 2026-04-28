@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { appDatabase } from "~/lib/database";
+import { appDatabase, appReady } from "~/lib/database";
 import {
 	authorizedBearer,
 	expectedIngestToken,
@@ -12,10 +12,11 @@ export const Route = createFileRoute("/api/telemetry/events")({
 	server: {
 		handlers: {
 			POST: async ({ request }) => {
+				await appReady;
 				if (
 					!authorizedBearer(
 						request.headers.get("authorization"),
-						expectedIngestToken(appDatabase.client),
+						await expectedIngestToken(appDatabase.client),
 					)
 				) {
 					return Response.json({ error: "Unauthorized" }, { status: 401 });
@@ -38,7 +39,10 @@ export const Route = createFileRoute("/api/telemetry/events")({
 					return Response.json({ error: "Payload too large" }, { status: 413 });
 				}
 				try {
-					const result = ingestTurnUsage(appDatabase.client, JSON.parse(text));
+					const result = await ingestTurnUsage(
+						appDatabase.client,
+						JSON.parse(text),
+					);
 					return Response.json(result, { status: result.inserted ? 201 : 200 });
 				} catch (error) {
 					const message =

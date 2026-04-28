@@ -4,6 +4,8 @@ import viteReact from "@vitejs/plugin-react";
 import { nitro } from "nitro/vite";
 import { defineConfig } from "vite";
 
+const nitroPreset = process.env.NITRO_PRESET ?? "bun";
+
 export default defineConfig({
 	server: {
 		port: Number(process.env.PORT ?? 3000),
@@ -17,6 +19,11 @@ export default defineConfig({
 			srcDirectory: "src",
 		}),
 		viteReact(),
-		nitro({ preset: "bun" }),
+		nitro({
+			preset: nitroPreset,
+			...(nitroPreset === "vercel"
+				? { vercel: { functions: { runtime: "bun1.x" } } }
+				: {}),
+		}),
 	],
 });

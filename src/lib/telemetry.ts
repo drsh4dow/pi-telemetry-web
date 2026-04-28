@@ -1,6 +1,6 @@
-import type { Database } from "bun:sqlite";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
+import { type DatabaseClient, dbGet, dbRun } from "./database";
 import { env } from "./env";
 
 const optionalCleanString = z
@@ -88,36 +88,43 @@ export function telemetryHash(record: TurnUsageRecord): string {
 	return createHash("sha256").update(stableJson(record)).digest("hex");
 }
 
-export function expectedIngestToken(client: Database): string {
+export async function expectedIngestToken(
+	client: DatabaseClient,
+): Promise<string> {
 	if (env.PI_TELEMETRY_INGEST_TOKEN) return env.PI_TELEMETRY_INGEST_TOKEN;
 	return ensureStoredIngestToken(client);
 }
 
-export function ensureStoredIngestToken(client: Database): string {
-	const existing = client
-		.query("SELECT value FROM app_setting WHERE key = 'ingest_token'")
-		.get() as { value: string } | null;
+export async function ensureStoredIngestToken(
+	client: DatabaseClient,
+): Promise<string> {
+	const existing = await dbGet<{ value: string }>(
+		client,
+		"SELECT value FROM app_setting WHERE key = 'ingest_token'",
+	);
 	if (existing) return existing.value;
 	const token =
 		crypto.randomUUID().replaceAll("-", "") +
 		crypto.randomUUID().replaceAll("-", "");
-	client
-		.query(
-			"INSERT INTO app_setting (key, value, updated_at_ms) VALUES ('ingest_token', ?, ?)",
-		)
-		.run(token, Date.now());
+	await dbRun(
+		client,
+		"INSERT INTO app_setting (key, value, updated_at_ms) VALUES ('ingest_token', ?, ?)",
+		[token, Date.now()],
+	);
 	return token;
 }
 
-export function rotateStoredIngestToken(client: Database): string {
+export async function rotateStoredIngestToken(
+	client: DatabaseClient,
+): Promise<string> {
 	const token =
 		crypto.randomUUID().replaceAll("-", "") +
 		crypto.randomUUID().replaceAll("-", "");
-	client
-		.query(
-			"INSERT INTO app_setting (key, value, updated_at_ms) VALUES ('ingest_token', ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at_ms = excluded.updated_at_ms",
-		)
-		.run(token, Date.now());
+	await dbRun(
+		client,
+		"INSERT INTO app_setting (key, value, updated_at_ms) VALUES ('ingest_token', ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at_ms = excluded.updated_at_ms",
+		[token, Date.now()],
+	);
 	return token;
 }
 
@@ -134,10 +141,10 @@ export function authorizedBearer(
 	return timingSafeEqual(providedBuffer, tokenBuffer);
 }
 
-export function ingestTurnUsage(
-	client: Database,
+export async function ingestTurnUsage(
+	client: DatabaseClient,
 	input: unknown,
-): IngestResult {
+): Promise<IngestResult> {
 	const record = turnUsageRecordSchema.parse(input);
 	const hash = telemetryHash(record);
 	const eventTimestampMs = Date.parse(record.timestamp);
@@ -145,18 +152,17 @@ export function ingestTurnUsage(
 		throw new Error("Invalid telemetry timestamp");
 	}
 	const rawJson = stableJson(record);
-	const inserted = client
-		.query(
-			`INSERT OR IGNORE INTO telemetry_event (
-				hash, created_at_ms, event_timestamp_ms, schema_version, type, turn_index,
-				session_id, session_file, cwd, cwd_name, api, provider, model,
-				team, project, developer, git_root, git_remote, git_branch, git_commit,
-				git_user_name, git_user_email, input_tokens, output_tokens, cache_read_tokens,
-				cache_write_tokens, total_tokens, cost_input, cost_output, cost_cache_read,
-				cost_cache_write, cost_total, raw_json
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		)
-		.run(
+	const rowsAffected = await dbRun(
+		client,
+		`INSERT OR IGNORE INTO telemetry_event (
+			hash, created_at_ms, event_timestamp_ms, schema_version, type, turn_index,
+			session_id, session_file, cwd, cwd_name, api, provider, model,
+			team, project, developer, git_root, git_remote, git_branch, git_commit,
+			git_user_name, git_user_email, input_tokens, output_tokens, cache_read_tokens,
+			cache_write_tokens, total_tokens, cost_input, cost_output, cost_cache_read,
+			cost_cache_write, cost_total, raw_json
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		[
 			hash,
 			Date.now(),
 			eventTimestampMs,
@@ -190,14 +196,15 @@ export function ingestTurnUsage(
 			record.usage.cost?.cacheWrite ?? null,
 			record.usage.cost?.total ?? null,
 			rawJson,
-		);
-	return { inserted: inserted.changes === 1, hash };
+		],
+	);
+	return { inserted: rowsAffected === 1, hash };
 }
 
-export function importJsonl(
-	client: Database,
+export async function importJsonl(
+	client: DatabaseClient,
 	text: string,
-): { inserted: number; duplicate: number; invalid: number } {
+): Promise<{ inserted: number; duplicate: number; invalid: number }> {
 	let inserted = 0;
 	let duplicate = 0;
 	let invalid = 0;
@@ -205,7 +212,7 @@ export function importJsonl(
 		const trimmed = line.trim();
 		if (!trimmed) continue;
 		try {
-			const result = ingestTurnUsage(client, JSON.parse(trimmed));
+			const result = await ingestTurnUsage(client, JSON.parse(trimmed));
 			if (result.inserted) inserted += 1;
 			else duplicate += 1;
 		} catch {
