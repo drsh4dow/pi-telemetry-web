@@ -169,6 +169,15 @@ describe("dashboard queries", () => {
 		});
 		expect(all.filters.projects).toEqual(["alpha", "beta"]);
 		expect(all.byModel.map((item) => item.name)).toContain("sonnet");
+		expect(
+			all.byDeveloper.find((item) => item.name === "a@example.com"),
+		).toMatchObject({
+			cacheReadPercent: 0,
+			cacheReadTokens: 0,
+			costPerMillionTokens: 100,
+			inputTokens: 90,
+			outputTokens: 10,
+		});
 		expect(filtered.summary).toMatchObject({ tokens: 100, turns: 1 });
 		expect(filtered.events).toHaveLength(1);
 		expect(filtered.events[0]?.project).toBe("alpha");

@@ -48,6 +48,21 @@ export interface DashboardSummary {
 	projects: number;
 }
 
+export interface DashboardGroup {
+	name: string;
+	turns: number;
+	tokens: number;
+	inputTokens: number;
+	outputTokens: number;
+	cacheReadTokens: number;
+	cacheWriteTokens: number;
+	cost: number;
+	/** Effective USD per million total tokens, including discounted cache reads. */
+	costPerMillionTokens: number;
+	/** Percentage of total tokens served from cache reads. */
+	cacheReadPercent: number;
+}
+
 export interface DashboardData {
 	summary: DashboardSummary;
 	previous: DashboardSummary;
@@ -69,19 +84,9 @@ export interface DashboardData {
 		cells: number[][];
 		max: number;
 	};
-	byProject: Array<{
-		name: string;
-		turns: number;
-		tokens: number;
-		cost: number;
-	}>;
-	byDeveloper: Array<{
-		name: string;
-		turns: number;
-		tokens: number;
-		cost: number;
-	}>;
-	byModel: Array<{ name: string; turns: number; tokens: number; cost: number }>;
+	byProject: DashboardGroup[];
+	byDeveloper: DashboardGroup[];
+	byModel: DashboardGroup[];
 	filters: {
 		teams: string[];
 		projects: string[];
@@ -225,18 +230,27 @@ export async function getDashboardData(
 	);
 
 	const group = (column: string) =>
-		dbAll<{
-			name: string;
-			turns: number;
-			tokens: number;
-			cost: number;
-		}>(
+		dbAll<DashboardGroup>(
 			client,
 			`SELECT
 				COALESCE(${column}, 'Unknown') AS name,
 				COUNT(*) AS turns,
 				COALESCE(SUM(total_tokens), 0) AS tokens,
-				COALESCE(SUM(cost_total), 0) AS cost
+				COALESCE(SUM(input_tokens), 0) AS inputTokens,
+				COALESCE(SUM(output_tokens), 0) AS outputTokens,
+				COALESCE(SUM(cache_read_tokens), 0) AS cacheReadTokens,
+				COALESCE(SUM(cache_write_tokens), 0) AS cacheWriteTokens,
+				COALESCE(SUM(cost_total), 0) AS cost,
+				CASE
+					WHEN COALESCE(SUM(total_tokens), 0) > 0
+					THEN COALESCE(SUM(cost_total), 0) * 1000000.0 / SUM(total_tokens)
+					ELSE 0
+				END AS costPerMillionTokens,
+				CASE
+					WHEN COALESCE(SUM(total_tokens), 0) > 0
+					THEN COALESCE(SUM(cache_read_tokens), 0) * 100.0 / SUM(total_tokens)
+					ELSE 0
+				END AS cacheReadPercent
 			FROM telemetry_event ${where.sql}
 			GROUP BY name
 			ORDER BY tokens DESC

@@ -17,7 +17,7 @@ import {
 	CardTitle,
 } from "~/components/ui/card";
 import { Tabs } from "~/components/ui/tabs";
-import type { DashboardData } from "~/lib/dashboard";
+import type { DashboardData, DashboardGroup } from "~/lib/dashboard";
 import {
 	formatCompact,
 	formatCost,
@@ -390,11 +390,8 @@ function TreemapCard({
 	const tree = data.byProject
 		.filter((p) => p.tokens > 0)
 		.map((p) => ({
-			name: p.name,
+			...p,
 			size: Math.max(p.tokens, 1),
-			tokens: p.tokens,
-			cost: p.cost,
-			turns: p.turns,
 			intensity: maxCost > 0 ? p.cost / maxCost : 0,
 		}));
 	return (
@@ -508,7 +505,7 @@ function TreemapTooltip({
 }: {
 	active?: boolean;
 	payload?: Array<{
-		payload: { name: string; tokens: number; cost: number; turns: number };
+		payload: DashboardGroup;
 	}>;
 }) {
 	if (!active || !payload?.length) return null;
@@ -520,6 +517,11 @@ function TreemapTooltip({
 			<div className="mt-1 space-y-0.5 text-xs">
 				<TooltipRow label="Tokens" value={formatCompact(p.tokens)} />
 				<TooltipRow label="Cost" value={formatCost(p.cost)} />
+				<TooltipRow
+					label="Effective rate"
+					value={`${formatCost(p.costPerMillionTokens)}/1M`}
+				/>
+				<TooltipRow label="Cache reads" value={formatCacheShare(p)} />
 				<TooltipRow label="Turns" value={formatCount(p.turns)} />
 			</div>
 		</div>
@@ -533,6 +535,10 @@ function TooltipRow({ label, value }: { label: string; value: string }) {
 			<span className="tabular text-foreground">{value}</span>
 		</div>
 	);
+}
+
+function formatCacheShare(row: DashboardGroup): string {
+	return `${Math.round(row.cacheReadPercent)}% cached`;
 }
 
 function truncate(s: string, n: number) {
@@ -561,7 +567,9 @@ function LeaderboardsCard({
 			<CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
 				<div className="space-y-1.5">
 					<CardTitle>Top consumers</CardTitle>
-					<CardDescription>Ranked by total tokens.</CardDescription>
+					<CardDescription>
+						Ranked by total tokens. Cost varies with model and cache mix.
+					</CardDescription>
 				</div>
 				<Tabs
 					value={active}
@@ -594,12 +602,18 @@ function LeaderboardsCard({
 									<span className="z-1 truncate text-foreground text-sm">
 										{row.name}
 									</span>
-									<span className="z-1 flex items-baseline gap-3 text-sm">
-										<span className="tabular text-foreground">
-											{formatCompact(row.tokens)}
+									<span className="z-1 flex flex-col items-end gap-0.5 text-sm">
+										<span className="flex items-baseline gap-3">
+											<span className="tabular text-foreground">
+												{formatCompact(row.tokens)}
+											</span>
+											<span className="tabular text-muted-foreground text-xs">
+												{formatCostCompact(row.cost)}
+											</span>
 										</span>
-										<span className="tabular text-muted-foreground text-xs">
-											{formatCostCompact(row.cost)}
+										<span className="tabular text-muted-foreground text-[10px]">
+											{formatCost(row.costPerMillionTokens)}/1M ·{" "}
+											{formatCacheShare(row)}
 										</span>
 									</span>
 								</li>
