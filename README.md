@@ -1,6 +1,6 @@
 # pi-telemetry-web
 
-Self-hosted telemetry dashboard for [`pi-telemetry-minimal`](https://github.com/drsh4dow/pi-telemetry-minimal).
+Self-hosted telemetry dashboard for [`pi-telemetry-minimal`](https://codeberg.org/drsh4dow/pi-telemetry-minimal).
 
 It receives the existing `turn_usage` webhook payload, stores validated events in SQLite-compatible storage, and shows usage by project, developer, model, provider, and time range.
 

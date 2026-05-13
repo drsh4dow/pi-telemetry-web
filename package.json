@@ -4,16 +4,16 @@
 	"description": "Self-hosted telemetry dashboard companion for pi-telemetry-minimal",
 	"type": "module",
 	"sideEffects": false,
-	"author": "drsh4dow <daniel.morettiv@gmail.com> (https://github.com/drsh4dow)",
+	"author": "drsh4dow <daniel.morettiv@gmail.com> (https://codeberg.org/drsh4dow)",
 	"license": "MIT",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/drsh4dow/pi-telemetry-web.git"
+		"url": "git+https://codeberg.org/drsh4dow/pi-telemetry-web.git"
 	},
 	"bugs": {
-		"url": "https://github.com/drsh4dow/pi-telemetry-web/issues"
+		"url": "https://codeberg.org/drsh4dow/pi-telemetry-web/issues"
 	},
-	"homepage": "https://github.com/drsh4dow/pi-telemetry-web#readme",
+	"homepage": "https://codeberg.org/drsh4dow/pi-telemetry-web#readme",
 	"scripts": {
 		"dev": "bun --bun vite dev",
 		"build": "bun run build:docker",
